@@ -1,8 +1,8 @@
-import torch
-
 from ..utils import box_utils
 from .data_preprocessing import PredictionTransform
 from ..utils.misc import Timer
+
+import tensorflow as tf
 
 
 class Predictor:
@@ -16,33 +16,20 @@ class Predictor:
         self.nms_method = nms_method
 
         self.sigma = sigma
-        if device:
-            self.device = device
-        else:
-            self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-        self.net.to(self.device)
-        self.net.eval()
 
         self.timer = Timer()
 
     def predict(self, image, top_k=-1, prob_threshold=None):
-        cpu_device = torch.device("cpu")
         height, width, _ = image.shape
         image = self.transform(image)
-        images = image.unsqueeze(0)
-        images = images.to(self.device)
-        with torch.no_grad():
-            self.timer.start()
-            scores, boxes = self.net.forward(images)
-            print("Inference time: ", self.timer.end())
+        self.timer.start()
+        scores, boxes = self.net.forward(image)
+        print("Inference time: ", self.timer.end())
         boxes = boxes[0]
         scores = scores[0]
         if not prob_threshold:
             prob_threshold = self.filter_threshold
         # this version of nms is slower on GPU, so we move data to CPU.
-        boxes = boxes.to(cpu_device)
-        scores = scores.to(cpu_device)
         picked_box_probs = []
         picked_labels = []
         for class_index in range(1, scores.size(1)):
@@ -52,7 +39,7 @@ class Predictor:
             if probs.size(0) == 0:
                 continue
             subset_boxes = boxes[mask, :]
-            box_probs = torch.cat([subset_boxes, probs.reshape(-1, 1)], dim=1)
+            box_probs = tf.concat([subset_boxes, probs.reshape(-1, 1)], dim=1)
             box_probs = box_utils.nms(box_probs, self.nms_method,
                                       score_threshold=prob_threshold,
                                       iou_threshold=self.iou_threshold,
@@ -62,10 +49,11 @@ class Predictor:
             picked_box_probs.append(box_probs)
             picked_labels.extend([class_index] * box_probs.size(0))
         if not picked_box_probs:
-            return torch.tensor([]), torch.tensor([]), torch.tensor([])
-        picked_box_probs = torch.cat(picked_box_probs)
+            return tf.constant([], dtype=tf.float32), tf.constant([], dtype=tf.float32), tf.constant([],
+                                                                                                     dtype=tf.float32)
+        picked_box_probs = tf.concat(picked_box_probs)
         picked_box_probs[:, 0] *= width
         picked_box_probs[:, 1] *= height
         picked_box_probs[:, 2] *= width
         picked_box_probs[:, 3] *= height
-        return picked_box_probs[:, :4], torch.tensor(picked_labels), picked_box_probs[:, 4]
+        return picked_box_probs[:, :4], tf.constant(picked_labels), picked_box_probs[:, 4]

@@ -1,10 +1,10 @@
-import numpy as np
-import tensorflow.python.keras as keras
+from collections import namedtuple
+from typing import List
+
 import tensorflow as tf
-from typing import List, Tuple
+import tensorflow.python.keras as keras
 
 from ..utils import box_utils
-from collections import namedtuple
 
 GraphPath = namedtuple("GraphPath", ['s0', 'name', 's1'])  #
 

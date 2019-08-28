@@ -1,5 +1,5 @@
 import collections
-import torch
+import tensorflow as tf
 import itertools
 from typing import List
 import math
@@ -9,7 +9,7 @@ SSDBoxSizes = collections.namedtuple('SSDBoxSizes', ['min', 'max'])
 SSDSpec = collections.namedtuple('SSDSpec', ['feature_map_size', 'shrinkage', 'box_sizes', 'aspect_ratios'])
 
 
-def generate_ssd_priors(specs: List[SSDSpec], image_size, clamp=True) -> torch.Tensor:
+def generate_ssd_priors(specs: List[SSDSpec], image_size, clamp=True):
     """Generate SSD Prior Boxes.
 
     It returns the center, height and width of the priors. The values are relative to the image size
@@ -74,9 +74,9 @@ def generate_ssd_priors(specs: List[SSDSpec], image_size, clamp=True) -> torch.T
                     h * ratio
                 ])
 
-    priors = torch.tensor(priors)
+    priors = tf.constant(priors)
     if clamp:
-        torch.clamp(priors, 0.0, 1.0, out=priors)
+        priors = tf.clip_by_value(priors, 0.0, 1.0)
     return priors
 
 
@@ -100,9 +100,9 @@ def convert_locations_to_boxes(locations, priors, center_variance,
     # priors can have one dimension less.
     if priors.dim() + 1 == locations.dim():
         priors = priors.unsqueeze(0)
-    return torch.cat([
+    return tf.concat([
         locations[..., :2] * center_variance * priors[..., 2:] + priors[..., :2],
-        torch.exp(locations[..., 2:] * size_variance) * priors[..., 2:]
+        tf.exp(locations[..., 2:] * size_variance) * priors[..., 2:]
     ], dim=locations.dim() - 1)
 
 
@@ -110,13 +110,13 @@ def convert_boxes_to_locations(center_form_boxes, center_form_priors, center_var
     # priors can have one dimension less
     if center_form_priors.dim() + 1 == center_form_boxes.dim():
         center_form_priors = center_form_priors.unsqueeze(0)
-    return torch.cat([
+    return tf.concat([
         (center_form_boxes[..., :2] - center_form_priors[..., :2]) / center_form_priors[..., 2:] / center_variance,
-        torch.log(center_form_boxes[..., 2:] / center_form_priors[..., 2:]) / size_variance
+        tf.math.log(center_form_boxes[..., 2:] / center_form_priors[..., 2:]) / size_variance
     ], dim=center_form_boxes.dim() - 1)
 
 
-def area_of(left_top, right_bottom) -> torch.Tensor:
+def area_of(left_top, right_bottom):
     """Compute the areas of rectangles given two corners.
 
     Args:
@@ -126,7 +126,7 @@ def area_of(left_top, right_bottom) -> torch.Tensor:
     Returns:
         area (N): return the area.
     """
-    hw = torch.clamp(right_bottom - left_top, min=0.0)
+    hw = tf.clip_by_value(right_bottom - left_top, min=0.0)
     return hw[..., 0] * hw[..., 1]
 
 
@@ -140,8 +140,8 @@ def iou_of(boxes0, boxes1, eps=1e-5):
     Returns:
         iou (N): IoU values.
     """
-    overlap_left_top = torch.max(boxes0[..., :2], boxes1[..., :2])
-    overlap_right_bottom = torch.min(boxes0[..., 2:], boxes1[..., 2:])
+    overlap_left_top = tf.keras.backend.max(boxes0[..., :2], boxes1[..., :2])
+    overlap_right_bottom = tf.keras.backend.min(boxes0[..., 2:], boxes1[..., 2:])
 
     overlap_area = area_of(overlap_left_top, overlap_right_bottom)
     area0 = area_of(boxes0[..., :2], boxes0[..., 2:])
@@ -174,7 +174,7 @@ def assign_priors(gt_boxes, gt_labels, corner_form_priors,
     best_target_per_prior.index_fill_(0, best_prior_per_target_index, 2)
     # size: num_priors
     labels = gt_labels[best_target_per_prior_index]
-    labels[best_target_per_prior < iou_threshold] = 0  # the backgournd id
+    labels[best_target_per_prior < iou_threshold] = 0  # the background id
     boxes = gt_boxes[best_target_per_prior_index]
     return boxes, labels
 
@@ -205,14 +205,14 @@ def hard_negative_mining(loss, labels, neg_pos_ratio):
 
 
 def center_form_to_corner_form(locations):
-    return torch.cat([locations[..., :2] - locations[..., 2:]/2,
-                     locations[..., :2] + locations[..., 2:]/2], locations.dim() - 1) 
+    return tf.concat([locations[..., :2] - locations[..., 2:] / 2,
+                      locations[..., :2] + locations[..., 2:] / 2], locations.dim() - 1)
 
 
 def corner_form_to_center_form(boxes):
-    return torch.cat([
+    return tf.concat([
         (boxes[..., :2] + boxes[..., 2:]) / 2,
-         boxes[..., 2:] - boxes[..., :2]
+        boxes[..., 2:] - boxes[..., :2]
     ], boxes.dim() - 1)
 
 
@@ -275,8 +275,8 @@ def soft_nms(box_scores, score_threshold, sigma=0.5, top_k=-1):
     """
     picked_box_scores = []
     while box_scores.size(0) > 0:
-        max_score_index = torch.argmax(box_scores[:, 4])
-        cur_box_prob = torch.tensor(box_scores[max_score_index, :])
+        max_score_index = tf.argmax(box_scores[:, 4])
+        cur_box_prob = tf.constant(box_scores[max_score_index, :])
         picked_box_scores.append(cur_box_prob)
         if len(picked_box_scores) == top_k > 0 or box_scores.size(0) == 1:
             break
@@ -284,12 +284,9 @@ def soft_nms(box_scores, score_threshold, sigma=0.5, top_k=-1):
         box_scores[max_score_index, :] = box_scores[-1, :]
         box_scores = box_scores[:-1, :]
         ious = iou_of(cur_box.unsqueeze(0), box_scores[:, :-1])
-        box_scores[:, -1] = box_scores[:, -1] * torch.exp(-(ious * ious) / sigma)
+        box_scores[:, -1] = box_scores[:, -1] * tf.exp(-(ious * ious) / sigma)
         box_scores = box_scores[box_scores[:, -1] > score_threshold, :]
     if len(picked_box_scores) > 0:
-        return torch.stack(picked_box_scores)
+        return tf.stack(picked_box_scores)
     else:
-        return torch.tensor([])
-
-
-
+        return tf.constant([])
