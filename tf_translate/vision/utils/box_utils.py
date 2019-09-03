@@ -1,8 +1,9 @@
 import collections
-import tensorflow as tf
 import itertools
-from typing import List
 import math
+from typing import List
+
+import tensorflow as tf
 
 SSDBoxSizes = collections.namedtuple('SSDBoxSizes', ['min', 'max'])
 
@@ -98,12 +99,15 @@ def convert_locations_to_boxes(locations, priors, center_variance,
             are relative to the image size.
     """
     # priors can have one dimension less.
-    if priors.dim() + 1 == locations.dim():
-        priors = priors.unsqueeze(0)
-    return tf.concat([
-        locations[..., :2] * center_variance * priors[..., 2:] + priors[..., :2],
-        tf.exp(locations[..., 2:] * size_variance) * priors[..., 2:]
-    ], dim=locations.dim() - 1)
+    if len(priors.shape) + 1 == len(locations.shape):
+        priors = tf.keras.backend.expand_dims(priors, 0)
+    loc_slice = tf.slice(locations, [0, 0, 2], [-1, -1, -1])
+    prior_slice = tf.slice(priors, [0, 0, 2], [-1, -1, -1])
+    return tf.keras.layers.Concatenate(axis=len(locations.shape) - 1)([
+        tf.slice(locations, [0, 0, 0], [-1, -1, 2]) * center_variance * prior_slice + tf.slice(priors, [0, 0, 0],
+                                                                                               [-1, -1, 2]),
+        tf.math.exp(loc_slice * size_variance) * prior_slice
+    ])
 
 
 def convert_boxes_to_locations(center_form_boxes, center_form_priors, center_variance, size_variance):
@@ -126,7 +130,7 @@ def area_of(left_top, right_bottom):
     Returns:
         area (N): return the area.
     """
-    hw = tf.clip_by_value(right_bottom - left_top, min=0.0)
+    hw = tf.nn.relu(right_bottom - left_top)
     return hw[..., 0] * hw[..., 1]
 
 
@@ -140,8 +144,8 @@ def iou_of(boxes0, boxes1, eps=1e-5):
     Returns:
         iou (N): IoU values.
     """
-    overlap_left_top = tf.keras.backend.max(boxes0[..., :2], boxes1[..., :2])
-    overlap_right_bottom = tf.keras.backend.min(boxes0[..., 2:], boxes1[..., 2:])
+    overlap_left_top = tf.keras.backend.maximum(boxes0[..., :2], boxes1[..., :2])
+    overlap_right_bottom = tf.keras.backend.minimum(boxes0[..., 2:], boxes1[..., 2:])
 
     overlap_area = area_of(overlap_left_top, overlap_right_bottom)
     area0 = area_of(boxes0[..., :2], boxes0[..., 2:])
@@ -206,7 +210,7 @@ def hard_negative_mining(loss, labels, neg_pos_ratio):
 
 def center_form_to_corner_form(locations):
     return tf.concat([locations[..., :2] - locations[..., 2:] / 2,
-                      locations[..., :2] + locations[..., 2:] / 2], locations.dim() - 1)
+                      locations[..., :2] + locations[..., 2:] / 2], len(locations.shape) - 1)
 
 
 def corner_form_to_center_form(boxes):
@@ -230,23 +234,24 @@ def hard_nms(box_scores, iou_threshold, top_k=-1, candidate_size=200):
     scores = box_scores[:, -1]
     boxes = box_scores[:, :-1]
     picked = []
-    _, indexes = scores.sort(descending=True)
+    indexes = tf.argsort(scores, direction='DESCENDING')
     indexes = indexes[:candidate_size]
     while len(indexes) > 0:
         current = indexes[0]
-        picked.append(current.item())
+        picked.append(current.numpy())
         if 0 < top_k == len(picked) or len(indexes) == 1:
             break
         current_box = boxes[current, :]
         indexes = indexes[1:]
-        rest_boxes = boxes[indexes, :]
+        # rest_boxes = boxes[indexes, :]
+        rest_boxes = tf.gather(boxes, indexes)
         iou = iou_of(
             rest_boxes,
-            current_box.unsqueeze(0),
+            tf.expand_dims(current_box, axis=0),
         )
         indexes = indexes[iou <= iou_threshold]
 
-    return box_scores[picked, :]
+    return tf.gather(box_scores, picked)
 
 
 def nms(box_scores, nms_method=None, score_threshold=None, iou_threshold=None,

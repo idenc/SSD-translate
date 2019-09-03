@@ -1,7 +1,8 @@
 from ..utils import box_utils
+import tensorflow as tf
 
 
-class MultiboxLoss(nn.Module):
+class MultiboxLoss(tf.keras.Model):
     def __init__(self, priors, iou_threshold, neg_pos_ratio,
                  center_variance, size_variance, device):
         """Implement SSD Multibox Loss.
@@ -27,16 +28,15 @@ class MultiboxLoss(nn.Module):
             boxes (batch_size, num_priors, 4): real boxes corresponding all the priors.
         """
         num_classes = confidence.size(2)
-        with torch.no_grad():
-            # derived from cross_entropy=sum(log(p))
-            loss = -F.log_softmax(confidence, dim=2)[:, :, 0]
-            mask = box_utils.hard_negative_mining(loss, labels, self.neg_pos_ratio)
+        # derived from cross_entropy=sum(log(p))
+        loss = -tf.nn.log_softmax(confidence, dim=2)[:, :, 0]
+        mask = box_utils.hard_negative_mining(loss, labels, self.neg_pos_ratio)
 
         confidence = confidence[mask, :]
-        classification_loss = F.cross_entropy(confidence.reshape(-1, num_classes), labels[mask], size_average=False)
+        classification_loss = tf.nn.softmax_cross_entropy_with_logits(confidence.reshape(-1, num_classes), labels[mask])
         pos_mask = labels > 0
         predicted_locations = predicted_locations[pos_mask, :].reshape(-1, 4)
         gt_locations = gt_locations[pos_mask, :].reshape(-1, 4)
-        smooth_l1_loss = F.smooth_l1_loss(predicted_locations, gt_locations, size_average=False)
+        smooth_l1_loss = tf.losses.Huber(predicted_locations, gt_locations)
         num_pos = gt_locations.size(0)
-        return smooth_l1_loss/num_pos, classification_loss/num_pos
+        return smooth_l1_loss / num_pos, classification_loss / num_pos

@@ -1,23 +1,25 @@
 import argparse
-import os
-import logging
-import sys
 import itertools
+import logging
+import os
+import sys
 
-from vision.utils.misc import str2bool, Timer, freeze_net_layers, store_labels
-from vision.ssd.ssd import MatchPrior
-from vision.ssd.vgg_ssd import create_vgg_ssd
-from vision.ssd.mobilenetv1_ssd import create_mobilenetv1_ssd
-from vision.ssd.mobilenetv1_ssd_lite import create_mobilenetv1_ssd_lite
-from vision.ssd.mobilenet_v2_ssd_lite import create_mobilenetv2_ssd_lite
-from vision.ssd.squeezenet_ssd_lite import create_squeezenet_ssd_lite
-from vision.datasets.voc_dataset import VOCDataset
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+
 from vision.datasets.open_images import OpenImagesDataset
+# from vision.ssd.mobilenetv1_ssd_lite import create_mobilenetv1_ssd_lite
+# from vision.ssd.mobilenet_v2_ssd_lite import create_mobilenetv2_ssd_lite
+# from vision.ssd.squeezenet_ssd_lite import create_squeezenet_ssd_lite
+from vision.datasets.voc_dataset import VOCDataset
 from vision.nn.multibox_loss import MultiboxLoss
-from vision.ssd.config import vgg_ssd_config
 from vision.ssd.config import mobilenetv1_ssd_config
 from vision.ssd.config import squeezenet_ssd_config
+from vision.ssd.config import vgg_ssd_config
 from vision.ssd.data_preprocessing import TrainAugmentation, TestTransform
+# from vision.ssd.vgg_ssd import create_vgg_ssd
+from vision.ssd.mobilenetv1_ssd import create_mobilenetv1_ssd
+from vision.ssd.ssd import MatchPrior
+from vision.utils.misc import str2bool, Timer, freeze_net_layers, store_labels
 
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
@@ -30,7 +32,8 @@ parser.add_argument('--validation_dataset', help='Dataset directory path')
 parser.add_argument('--balance_data', action='store_true',
                     help="Balance training data by down-sampling more frequent labels.")
 
-parser.add_argument('--net', default="vgg16-ssd",
+parser.add_argument('--net', default="mb1-ssd",
+                    choices=['vgg16-ssd', 'mb1-ssd', 'mb1-ssd-lite', 'mb2-ssd-lite', 'sq-ssd-lite'],
                     help="The network architecture, it can be mb1-ssd, mb1-lite-ssd, mb2-ssd-lite or vgg16-ssd.")
 parser.add_argument('--freeze_base_net', action='store_true',
                     help="Freeze base net layers.")
@@ -199,14 +202,13 @@ if __name__ == '__main__':
             num_classes = len(dataset.class_names)
 
         else:
-            raise ValueError(f"Dataset tpye {args.dataset_type} is not supported.")
+            raise ValueError(f"Dataset type {args.dataset_type} is not supported.")
         datasets.append(dataset)
     logging.info(f"Stored labels into file {label_file}.")
-    train_dataset = ConcatDataset(datasets)
-    logging.info("Train dataset size: {}".format(len(train_dataset)))
-    train_loader = DataLoader(train_dataset, args.batch_size,
-                              num_workers=args.num_workers,
-                              shuffle=True)
+    logging.info("Train dataset size: {}".format(len(datasets)))
+    train_gen = ImageDataGenerator()
+    train_loader = train_gen.flow(datasets)
+
     logging.info("Prepare Validation datasets.")
     if args.dataset_type == "voc":
         val_dataset = VOCDataset(args.validation_dataset, transform=test_transform,

@@ -1,44 +1,47 @@
-from tensorflow.python.keras.applications import MobileNet
-from tensorflow.python.keras.layers import Conv2D, ReLU
-from tensorflow.python.keras.models import Sequential
+from tensorflow.python.keras.layers import Conv2D, ReLU, Input, ZeroPadding2D
 
+from vision.nn.mobilenet import MobileNet
 from .config import mobilenetv1_ssd_config as config
 from .predictor import Predictor
 from .ssd import SSD
 
 
 def create_mobilenetv1_ssd(num_classes, is_test=False):
-    base_net = MobileNet()  # disable dropout layer
+    base_net = MobileNet(input_shape=(300, 300, 3), input_tensor=Input(shape=(300, 300, 3), batch_size=1),
+                         include_top=False)  # disable dropout layer
 
     source_layer_indexes = [
-        12,
-        14,
+        73,
+        85,
     ]
+
     extras = [
-        Sequential(
+        [
             Conv2D(filters=256, kernel_size=1),
             ReLU(),
-            Conv2D(filters=512, kernel_size=3, strides=2, padding="same"),
+            ZeroPadding2D(padding=1),
+            Conv2D(filters=512, kernel_size=3, strides=2, padding="valid"),
             ReLU()
-        ),
-        Sequential(
+        ],
+        [
             Conv2D(filters=128, kernel_size=1),
             ReLU(),
             Conv2D(filters=256, kernel_size=3, strides=2, padding="same"),
             ReLU()
-        ),
-        Sequential(
+        ],
+        [
             Conv2D(filters=128, kernel_size=1),
             ReLU(),
             Conv2D(filters=256, kernel_size=3, strides=2, padding="same"),
             ReLU()
-        ),
-        Sequential(
+        ],
+        [
             Conv2D(filters=128, kernel_size=1),
             ReLU(),
-            Conv2D(filters=256, kernel_size=3, strides=2, padding="same"),
+            ZeroPadding2D(padding=1),
+            Conv2D(filters=256, kernel_size=3, strides=2, padding="valid"),
             ReLU()
-        )
+        ]
     ]
 
     regression_headers = [

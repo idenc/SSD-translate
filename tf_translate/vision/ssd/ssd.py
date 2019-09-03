@@ -2,20 +2,19 @@ from collections import namedtuple
 from typing import List
 
 import tensorflow as tf
-import tensorflow.python.keras as keras
 
 from ..utils import box_utils
 
 GraphPath = namedtuple("GraphPath", ['s0', 'name', 's1'])  #
 
 
-class SSD(keras.Model):
+class SSD:
     def __init__(self, num_classes: int, base_net: tf.keras.Model, source_layer_indexes: List[int],
                  extras: List, classification_headers: List,
-                 regression_headers: List, is_test=False, config=None, device=None):
-        """Compose a SSD model using the given components.
+                 regression_headers: List, is_test=False, config=None):
         """
-        super(SSD, self).__init__()
+        Compose a SSD model using the given components.
+        """
         self.num_classes = num_classes
         self.base_net = base_net
         self.source_layer_indexes = source_layer_indexes
@@ -28,18 +27,17 @@ class SSD(keras.Model):
         # register layers in source_layer_indexes by adding them to a module list
         self.source_layer_add_ons = [t[1] for t in source_layer_indexes
                                      if isinstance(t, tuple) and not isinstance(t, GraphPath)]
-
         if is_test:
-            self.config = config
-            self.priors = config.priors.to(self.device)
+            self.priors = config.priors
 
-    def compute_output_signature(self, input_signature):
-        pass
+        # input = tf.keras.Input(shape=(300, 300, 3), name="input", dtype=tf.float32)
+        confidences, locations = self.call(self.base_net.input)
+        self.ssd = tf.keras.models.Model(inputs=self.base_net.input, outputs=[confidences, locations])
 
-    def forward(self, x):
+    def call(self, x):
         confidences = []
         locations = []
-        start_layer_index = 0
+        start_layer_index = 1
         header_index = 0
         for end_layer_index in self.source_layer_indexes:
             if isinstance(end_layer_index, GraphPath):
@@ -53,7 +51,7 @@ class SSD(keras.Model):
             else:
                 added_layer = None
                 path = None
-            for layer in self.base_net[start_layer_index: end_layer_index]:
+            for layer in self.base_net.layers[start_layer_index: end_layer_index]:
                 x = layer(x)
             if added_layer:
                 y = added_layer(x)
@@ -73,21 +71,22 @@ class SSD(keras.Model):
             confidences.append(confidence)
             locations.append(location)
 
-        for layer in self.base_net[end_layer_index:]:
+        for layer in self.base_net.layers[end_layer_index:]:
             x = layer(x)
 
-        for layer in self.extras:
-            x = layer(x)
+        for sequence in self.extras:
+            for layer in sequence:
+                x = layer(x)
             confidence, location = self.compute_header(header_index, x)
             header_index += 1
             confidences.append(confidence)
             locations.append(location)
 
-        confidences = tf.concat(confidences, 1)
-        locations = tf.concat(locations, 1)
+        confidences = tf.keras.layers.Concatenate(1)(confidences)
+        locations = tf.keras.layers.Concatenate(1)(locations)
 
         if self.is_test:
-            confidences = tf.nn.softmax(confidences, axis=2)
+            confidences = tf.keras.layers.Softmax(axis=2)(confidences)
             boxes = box_utils.convert_locations_to_boxes(
                 locations, self.priors, self.config.center_variance, self.config.size_variance
             )
@@ -98,20 +97,15 @@ class SSD(keras.Model):
 
     def compute_header(self, i, x):
         confidence = self.classification_headers[i](x)
-        confidence = confidence.permute(0, 2, 3, 1).contiguous()
-        confidence = confidence.view(confidence.size(0), -1, self.num_classes)
+        confidence = tf.keras.layers.Reshape((-1, self.num_classes))(confidence)
 
         location = self.regression_headers[i](x)
-        location = location.permute(0, 2, 3, 1).contiguous()
-        location = location.view(location.size(0), -1, 4)
+        location = tf.keras.layers.Reshape((-1, 4))(location)
 
         return confidence, location
 
-    def init_from_base_net(self, model):
-        self.base_net.load_weights(model)
-
     def load(self, model):
-        self.load_weights(model)
+        self.ssd = tf.keras.models.load_model(model)
 
 
 class MatchPrior(object):
