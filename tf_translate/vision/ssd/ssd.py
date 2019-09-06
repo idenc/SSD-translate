@@ -11,7 +11,7 @@ GraphPath = namedtuple("GraphPath", ['s0', 'name', 's1'])  #
 class SSD:
     def __init__(self, num_classes: int, base_net: tf.keras.Model, source_layer_indexes: List[int],
                  extras: List, classification_headers: List,
-                 regression_headers: List, is_test=False, config=None):
+                 regression_headers: List, is_test=False, config=None, is_train=False):
         """
         Compose a SSD model using the given components.
         """
@@ -32,7 +32,13 @@ class SSD:
 
         # input = tf.keras.Input(shape=(300, 300, 3), name="input", dtype=tf.float32)
         confidences, locations = self.call(self.base_net.input)
-        self.ssd = tf.keras.models.Model(inputs=self.base_net.input, outputs=[confidences, locations])
+
+        if is_train:
+            one_big_prediction = tf.keras.layers.Concatenate()
+            output = one_big_prediction([confidences, locations])
+            self.ssd = tf.keras.models.Model(inputs=self.base_net.input, outputs=output)
+        else:
+            self.ssd = tf.keras.models.Model(inputs=self.base_net.input, outputs=[confidences, locations])
 
     def call(self, x):
         confidences = []

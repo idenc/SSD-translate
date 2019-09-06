@@ -1,10 +1,11 @@
 import argparse
 import itertools
 import logging
+import math
 import os
 import sys
 
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import tensorflow as tf
 
 from vision.datasets.open_images import OpenImagesDataset
 # from vision.ssd.mobilenetv1_ssd_lite import create_mobilenetv1_ssd_lite
@@ -27,8 +28,8 @@ parser = argparse.ArgumentParser(
 parser.add_argument("--dataset_type", default="voc", type=str,
                     help='Specify dataset type. Currently support voc and open_images.')
 
-parser.add_argument('--datasets', nargs='+', help='Dataset directory path')
-parser.add_argument('--validation_dataset', help='Dataset directory path')
+parser.add_argument('--datasets', nargs='+', help='Dataset directory path', required=True)
+parser.add_argument('--validation_dataset', help='Dataset directory path', required=True)
 parser.add_argument('--balance_data', action='store_true',
                     help="Balance training data by down-sampling more frequent labels.")
 
@@ -188,7 +189,7 @@ if __name__ == '__main__':
     for dataset_path in args.datasets:
         if args.dataset_type == 'voc':
             dataset = VOCDataset(dataset_path, transform=train_transform,
-                                 target_transform=target_transform)
+                                 target_transform=target_transform, batch_size=2)
             label_file = os.path.join(args.checkpoint_folder, "voc-model-labels.txt")
             store_labels(label_file, dataset.class_names)
             num_classes = len(dataset.class_names)
@@ -206,13 +207,11 @@ if __name__ == '__main__':
         datasets.append(dataset)
     logging.info(f"Stored labels into file {label_file}.")
     logging.info("Train dataset size: {}".format(len(datasets)))
-    train_gen = ImageDataGenerator()
-    train_loader = train_gen.flow(datasets)
 
     logging.info("Prepare Validation datasets.")
     if args.dataset_type == "voc":
         val_dataset = VOCDataset(args.validation_dataset, transform=test_transform,
-                                 target_transform=target_transform, is_test=True)
+                                 target_transform=target_transform, is_test=True, batch_size=2)
     elif args.dataset_type == 'open_images':
         val_dataset = OpenImagesDataset(dataset_path,
                                         transform=test_transform, target_transform=target_transform,
@@ -220,11 +219,8 @@ if __name__ == '__main__':
         logging.info(val_dataset)
     logging.info("validation dataset size: {}".format(len(val_dataset)))
 
-    val_loader = DataLoader(val_dataset, args.batch_size,
-                            num_workers=args.num_workers,
-                            shuffle=False)
     logging.info("Build network.")
-    net = create_net(num_classes)
+    net = create_net(num_classes, is_train=True)
     min_loss = -10000.0
     last_epoch = -1
 
@@ -251,18 +247,6 @@ if __name__ == '__main__':
         freeze_net_layers(net.extras)
         params = itertools.chain(net.regression_headers.parameters(), net.classification_headers.parameters())
         logging.info("Freeze all the layers except prediction heads.")
-    else:
-        params = [
-            {'params': net.base_net.parameters(), 'lr': base_net_lr},
-            {'params': itertools.chain(
-                net.source_layer_add_ons.parameters(),
-                net.extras.parameters()
-            ), 'lr': extra_layers_lr},
-            {'params': itertools.chain(
-                net.regression_headers.parameters(),
-                net.classification_headers.parameters()
-            )}
-        ]
 
     timer.start("Load Model")
     if args.resume:
@@ -278,38 +262,21 @@ if __name__ == '__main__':
 
     criterion = MultiboxLoss(config.priors, iou_threshold=0.5, neg_pos_ratio=3,
                              center_variance=0.1, size_variance=0.2)
-    optimizer = torch.optim.SGD(params, lr=args.lr, momentum=args.momentum,
-                                weight_decay=args.weight_decay)
+    optimizer = tf.keras.optimizers.SGD(lr=args.lr, momentum=args.momentum, decay=args.weight_decay)
+
     logging.info(f"Learning rate: {args.lr}, Base net learning rate: {base_net_lr}, "
                  + f"Extra Layers learning rate: {extra_layers_lr}.")
 
-    if args.scheduler == 'multi-step':
-        logging.info("Uses MultiStepLR scheduler.")
-        milestones = [int(v.strip()) for v in args.milestones.split(",")]
-        scheduler = MultiStepLR(optimizer, milestones=milestones,
-                                gamma=0.1, last_epoch=last_epoch)
-    elif args.scheduler == 'cosine':
-        logging.info("Uses CosineAnnealingLR scheduler.")
-        scheduler = CosineAnnealingLR(optimizer, args.t_max, last_epoch=last_epoch)
-    else:
-        logging.fatal(f"Unsupported Scheduler: {args.scheduler}.")
-        parser.print_help(sys.stderr)
-        sys.exit(1)
+    # data = datasets[0].generate()
+    # images, y_true = next(data)
+    # y_pred = net.ssd(images)
+    #
+    # loss = criterion.forward(y_true, y_pred)
 
+    net.ssd.compile(optimizer=optimizer, loss=criterion.forward, metrics=['accuracy'])
     logging.info(f"Start training from epoch {last_epoch + 1}.")
-    for epoch in range(last_epoch + 1, args.num_epochs):
-        scheduler.step()
-        train(train_loader, net, criterion, optimizer,
-              device=DEVICE, debug_steps=args.debug_steps, epoch=epoch)
-
-        if epoch % args.validation_epochs == 0 or epoch == args.num_epochs - 1:
-            val_loss, val_regression_loss, val_classification_loss = test(val_loader, net, criterion)
-            logging.info(
-                f"Epoch: {epoch}, " +
-                f"Validation Loss: {val_loss:.4f}, " +
-                f"Validation Regression Loss {val_regression_loss:.4f}, " +
-                f"Validation Classification Loss: {val_classification_loss:.4f}"
-            )
-            model_path = os.path.join(args.checkpoint_folder, f"{args.net}-Epoch-{epoch}-Loss-{val_loss}.pth")
-            net.save(model_path)
-            logging.info(f"Saved model {model_path}")
+    net.ssd.fit_generator(datasets[0].generate(),
+                          steps_per_epoch=math.ceil(len(datasets[0].ids) / datasets[0].batch_size),
+                          epochs=args.num_epochs, verbose=2, validation_data=val_dataset.generate(),
+                          validation_steps=math.ceil(len(val_dataset.ids) / val_dataset.batch_size),
+                          initial_epoch=last_epoch, workers=0)

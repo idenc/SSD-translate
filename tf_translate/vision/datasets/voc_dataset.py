@@ -10,13 +10,14 @@ import numpy as np
 class VOCDataset:
 
     def __init__(self, root, transform=None, target_transform=None, is_test=False, keep_difficult=False,
-                 label_file=None):
+                 batch_size=32):
         """Dataset for VOC data.
         Args:
             root: the root of the VOC2007 or VOC2012 dataset, the directory contains the following sub-directories:
                 Annotations, ImageSets, JPEGImages, SegmentationClass, SegmentationObject.
         """
         self.root = pathlib.Path(root)
+        self.batch_size = batch_size
         self.transform = transform
         self.target_transform = target_transform
         if is_test:
@@ -25,6 +26,7 @@ class VOCDataset:
             image_sets_file = self.root / "ImageSets/Main/trainval.txt"
         self.ids = VOCDataset._read_image_ids(image_sets_file)
         self.keep_difficult = keep_difficult
+        self.num_batches = len(self.ids) // self.batch_size
 
         # if the labels file exists, read in the class names
         label_file_name = self.root / "labels.txt"
@@ -55,18 +57,38 @@ class VOCDataset:
 
         self.class_dict = {class_name: i for i, class_name in enumerate(self.class_names)}
 
-    def __getitem__(self, index):
-        image_id = self.ids[index]
-        boxes, labels, is_difficult = self._get_annotation(image_id)
-        if not self.keep_difficult:
-            boxes = boxes[is_difficult == 0]
-            labels = labels[is_difficult == 0]
-        image = self._read_image(image_id)
-        if self.transform:
-            image, boxes, labels = self.transform(image, boxes, labels)
-        if self.target_transform:
-            boxes, labels = self.target_transform(boxes, labels)
-        return image, boxes, labels
+    def generate(self):
+        inputs, target1, target2 = [], [], []
+        while 1:
+            idxs = np.arange(len(self.ids))
+            # np.random.shuffle(idxs)
+            idxs = idxs[:self.num_batches * self.batch_size]
+            for j, i in enumerate(idxs):
+                image_id = self.ids[i]
+                boxes, labels, is_difficult = self._get_annotation(image_id)
+                if not self.keep_difficult:
+                    boxes = boxes[is_difficult == 0]
+                    labels = labels[is_difficult == 0]
+                image = self._read_image(image_id)
+                if self.transform:
+                    image, boxes, labels = self.transform(image, boxes, labels)
+                if self.target_transform:
+                    boxes, labels = self.target_transform(boxes, labels)
+                inputs.append(image)
+                target1.append(boxes)
+                target2.append(labels)
+
+                if len(target1) == self.batch_size:
+                    tmp_inputs = np.array(inputs, dtype=np.float32)
+                    tmp_target1 = np.array(target1)
+                    tmp_target2 = np.array(target2)
+                    tmp_target2 = np.expand_dims(tmp_target2, 2)
+                    tmp_target = np.concatenate([tmp_target1, tmp_target2], axis=2)
+                    inputs, target1, target2 = [], [], []
+                    yield (tmp_inputs, tmp_target)
+                elif j == len(idxs) - 1:
+                    inputs, targets = [], []
+                    break
 
     def get_image(self, index):
         image_id = self.ids[index]
@@ -98,7 +120,7 @@ class VOCDataset:
         is_difficult = []
         for object in objects:
             class_name = object.find('name').text.lower().strip()
-            # we're only concerned with clases in our list
+            # we're only concerned with classes in our list
             if class_name in self.class_dict:
                 bbox = object.find('bndbox')
 

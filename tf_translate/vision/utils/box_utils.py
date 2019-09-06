@@ -4,6 +4,7 @@ import math
 from typing import List
 
 import tensorflow as tf
+import numpy as np
 
 SSDBoxSizes = collections.namedtuple('SSDBoxSizes', ['min', 'max'])
 
@@ -112,12 +113,12 @@ def convert_locations_to_boxes(locations, priors, center_variance,
 
 def convert_boxes_to_locations(center_form_boxes, center_form_priors, center_variance, size_variance):
     # priors can have one dimension less
-    if center_form_priors.dim() + 1 == center_form_boxes.dim():
+    if len(center_form_priors.shape) + 1 == len(center_form_boxes.shape):
         center_form_priors = center_form_priors.unsqueeze(0)
     return tf.concat([
         (center_form_boxes[..., :2] - center_form_priors[..., :2]) / center_form_priors[..., 2:] / center_variance,
         tf.math.log(center_form_boxes[..., 2:] / center_form_priors[..., 2:]) / size_variance
-    ], dim=center_form_boxes.dim() - 1)
+    ], len(center_form_boxes.shape) - 1)
 
 
 def area_of(left_top, right_bottom):
@@ -163,23 +164,29 @@ def assign_priors(gt_boxes, gt_labels, corner_form_priors,
         priors (num_priors, 4): corner form priors
     Returns:
         boxes (num_priors, 4): real values for priors.
-        labels (num_priros): labels for priors.
+        labels (num_priors): labels for priors.
     """
     # size: num_priors x num_targets
-    ious = iou_of(gt_boxes.unsqueeze(0), corner_form_priors.unsqueeze(1))
+    ious = iou_of(np.expand_dims(gt_boxes, 0), np.expand_dims(corner_form_priors, 1))
     # size: num_priors
-    best_target_per_prior, best_target_per_prior_index = ious.max(1)
+    best_target_per_prior_index = tf.Variable(tf.argmax(ious, 1))
+    best_target_per_prior = tf.Variable(tf.math.reduce_max(ious, 1))
     # size: num_targets
-    best_prior_per_target, best_prior_per_target_index = ious.max(0)
+    best_prior_per_target_index = tf.argmax(ious, 0)
 
     for target_index, prior_index in enumerate(best_prior_per_target_index):
-        best_target_per_prior_index[prior_index] = target_index
+        best_target_per_prior_index[prior_index].assign(target_index)
     # 2.0 is used to make sure every target has a prior assigned
-    best_target_per_prior.index_fill_(0, best_prior_per_target_index, 2)
+    for indx in best_prior_per_target_index:
+        best_target_per_prior[indx].assign(2)
     # size: num_priors
-    labels = gt_labels[best_target_per_prior_index]
-    labels[best_target_per_prior < iou_threshold] = 0  # the background id
-    boxes = gt_boxes[best_target_per_prior_index]
+    labels = tf.gather(gt_labels, best_target_per_prior_index)
+    mask = tf.greater(best_target_per_prior, iou_threshold)
+
+    labels = tf.multiply(labels, tf.cast(mask, labels.dtype))
+    # labels[best_target_per_prior < iou_threshold] = 0  # the background id
+    boxes = tf.gather(gt_boxes, best_target_per_prior_index)
+    # boxes = gt_boxes[best_target_per_prior_index]
     return boxes, labels
 
 
@@ -197,15 +204,16 @@ def hard_negative_mining(loss, labels, neg_pos_ratio):
         labels (N, num_priors): the labels.
         neg_pos_ratio:  the ratio between the negative examples and positive examples.
     """
-    pos_mask = labels > 0
-    num_pos = pos_mask.long().sum(dim=1, keepdim=True)
+    pos_mask = tf.math.greater(labels, 0)
+    num_pos = tf.reduce_sum(tf.cast(pos_mask, dtype=tf.int32), axis=1, keepdims=True)
     num_neg = num_pos * neg_pos_ratio
 
-    loss[pos_mask] = -math.inf
-    _, indexes = loss.sort(dim=1, descending=True)
-    _, orders = indexes.sort(dim=1)
-    neg_mask = orders < num_neg
-    return pos_mask | neg_mask
+    idxs = tf.where(pos_mask)
+    loss = tf.tensor_scatter_nd_update(loss, idxs, tf.fill(tf.shape(idxs[:, 0]), -math.inf))
+    indexes = tf.argsort(loss, axis=1, direction='DESCENDING')
+    orders = tf.argsort(indexes, axis=1)
+    neg_mask = tf.math.less(orders, num_neg)
+    return tf.math.logical_or(pos_mask, neg_mask)
 
 
 def center_form_to_corner_form(locations):
@@ -217,7 +225,7 @@ def corner_form_to_center_form(boxes):
     return tf.concat([
         (boxes[..., :2] + boxes[..., 2:]) / 2,
         boxes[..., 2:] - boxes[..., :2]
-    ], boxes.dim() - 1)
+    ], len(boxes.shape) - 1)
 
 
 def hard_nms(box_scores, iou_threshold, top_k=-1, candidate_size=200):

@@ -6,8 +6,8 @@ from .predictor import Predictor
 from .ssd import SSD
 
 
-def create_mobilenetv1_ssd(num_classes, is_test=False):
-    base_net = MobileNet(input_shape=(300, 300, 3), input_tensor=Input(shape=(300, 300, 3), batch_size=1),
+def create_mobilenetv1_ssd(num_classes, is_test=False, is_train=False):
+    base_net = MobileNet(input_shape=(300, 300, 3), input_tensor=Input((300, 300, 3), batch_size=2),
                          include_top=False)  # disable dropout layer
 
     source_layer_indexes = [
@@ -63,7 +63,7 @@ def create_mobilenetv1_ssd(num_classes, is_test=False):
     ]
 
     return SSD(num_classes, base_net, source_layer_indexes,
-               extras, classification_headers, regression_headers, is_test=is_test, config=config)
+               extras, classification_headers, regression_headers, is_test=is_test, config=config, is_train=is_train)
 
 
 def create_mobilenetv1_ssd_predictor(net, candidate_size=200, nms_method=None, sigma=0.5, device=None):
