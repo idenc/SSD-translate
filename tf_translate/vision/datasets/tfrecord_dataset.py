@@ -2,35 +2,45 @@ import logging
 import os
 import pathlib
 import xml.etree.ElementTree as ET
+from tensorflow.python.keras.utils.data_utils import Sequence
+from tensorflow.python.data import TFRecordDataset
 
+import tensorflow as tf
 import cv2
 import numpy as np
-from tensorflow.python.keras.utils.data_utils import Sequence
 
 
-class VOCDataset(Sequence):
+class RecordDataset(Sequence):
 
     def __init__(self, root, transform=None, target_transform=None, is_test=False, keep_difficult=False,
                  batch_size=32):
-        """Dataset for VOC data.
+        """
+        Dataset for TFRecord data.
         Args:
-            root: the root of the VOC2007 or VOC2012 dataset, the directory contains the following sub-directories:
-                Annotations, ImageSets, JPEGImages, SegmentationClass, SegmentationObject.
+            root: the root of the TFRecord, the directory contains the following files:
+                label_map.txt, train.record, val.record.
         """
         self.root = pathlib.Path(root)
         self.batch_size = batch_size
         self.transform = transform
         self.target_transform = target_transform
         if is_test:
-            image_sets_file = self.root / "ImageSets/Main/test.txt"
+            image_sets_file = self.root / "val.record"
+            if os.path.isfile(self.root / "num_val.txt"):
+                with open(self.root / "num_val.txt", 'r') as f:
+                    self.num_records = int(f.read())
         else:
-            image_sets_file = self.root / "ImageSets/Main/trainval.txt"
-        self.ids = VOCDataset._read_image_ids(image_sets_file)
+            image_sets_file = self.root / "train.record"
+            if os.path.isfile(self.root / "num_val.txt"):
+                with open(self.root / "num_train.txt", 'r') as f:
+                    self.num_records = int(f.read())
+
+        self.dataset = TFRecordDataset(image_sets_file)
         self.keep_difficult = keep_difficult
         self.num_batches = len(self.ids) // self.batch_size
 
         # if the labels file exists, read in the class names
-        label_file_name = self.root / "labels.txt"
+        label_file_name = self.root / "label_map.txt"
 
         if os.path.isfile(label_file_name):
             class_string = ""
@@ -57,6 +67,23 @@ class VOCDataset(Sequence):
                                 'sheep', 'sofa', 'train', 'tvmonitor')
 
         self.class_dict = {class_name: i for i, class_name in enumerate(self.class_names)}
+        self.feature_list = {
+            'image/height': tf.FixedLenFeature([], tf.int64)
+        }
+        # self.feature_list = {
+        #     'image/height': tf.FixedLenFeature(),
+        #     'image/width': tf.train.Feature(int64_list=tf.train.Int64List(value=[width])),
+        #     'image/filename': tf.train.Feature(bytes_list=tf.train.BytesList(value=[filename])),
+        #     'image/source_id': tf.train.Feature(bytes_list=tf.train.BytesList(value=[filename])),
+        #     'image/encoded': tf.train.Feature(bytes_list=tf.train.BytesList(value=[encoded_jpg])),
+        #     'image/format': tf.train.Feature(bytes_list=tf.train.BytesList(value=[image_format])),
+        #     'image/object/bbox/xmin': tf.train.Feature(float_list=tf.train.FloatList(value=xmins)),
+        #     'image/object/bbox/xmax': tf.train.Feature(float_list=tf.train.FloatList(value=xmaxs)),
+        #     'image/object/bbox/ymin': tf.train.Feature(float_list=tf.train.FloatList(value=ymins)),
+        #     'image/object/bbox/ymax': tf.train.Feature(float_list=tf.train.FloatList(value=ymaxs)),
+        #     'image/object/class/text': tf.train.Feature(bytes_list=tf.train.BytesList(value=classes_text)),
+        #     'image/object/class/label': tf.train.Feature(int64_list=tf.train.Int64List(value=classes)),
+        # }
 
     def __getitem__(self, idx):
         inputs, target1, target2 = [], [], []
@@ -100,7 +127,7 @@ class VOCDataset(Sequence):
         return image_id, self._get_annotation(image_id)
 
     def __len__(self):
-        return int(np.ceil(len(self.ids) / float(self.batch_size)))
+        return len(self.ids)
 
     @staticmethod
     def _read_image_ids(image_sets_file):
@@ -142,3 +169,6 @@ class VOCDataset(Sequence):
         image = cv2.imread(str(image_file))
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         return image
+
+if __name__ == 'main':
+    record = RecordDataset(r'D:\train\tf_records')

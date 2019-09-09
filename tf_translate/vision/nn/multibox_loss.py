@@ -33,13 +33,14 @@ class MultiboxLoss(tf.keras.Model):
         labels = y_true[:, :, 4]
         num_classes = confidence.shape[2]
         # derived from cross_entropy=sum(log(p))
-        loss = -tf.nn.log_softmax(confidence, axis=2)[:, :, 0]
-        mask = box_utils.hard_negative_mining(loss, labels, self.neg_pos_ratio)
+
+        loss = tf.stop_gradient(-tf.nn.log_softmax(confidence, axis=2)[:, :, 0])
+        mask = tf.stop_gradient(box_utils.hard_negative_mining(loss, labels, self.neg_pos_ratio))
 
         confidence = tf.boolean_mask(confidence, mask)
         logits = tf.reshape(confidence, [-1, num_classes])
         ce_labels = tf.cast(tf.boolean_mask(labels, mask), tf.int64)
-        classification_loss = tf.reduce_sum(tf.nn.sparse_softmax_cross_entropy_with_logits(ce_labels, logits))
+        classification_loss = tf.reduce_sum(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=ce_labels, logits=logits))
         pos_mask = tf.math.greater(labels, 0)
         predicted_locations = tf.reshape(tf.boolean_mask(predicted_locations, pos_mask), [-1, 4])
         gt_locations = tf.reshape(tf.boolean_mask(gt_locations, pos_mask), [-1, 4])

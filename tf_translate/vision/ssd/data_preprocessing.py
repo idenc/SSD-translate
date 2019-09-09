@@ -19,8 +19,7 @@ class TrainAugmentation:
             ToPercentCoords(),
             Resize(self.size),
             SubtractMeans(self.mean),
-            lambda img, boxes=None, labels=None: (img / std, boxes, labels),
-            # ToTensor(),
+            DivideByStd(std)
         ])
 
     def __call__(self, img, boxes, labels):
@@ -28,7 +27,7 @@ class TrainAugmentation:
 
         Args:
             img: the output of cv.imread in RGB layout.
-            boxes: boundding boxes in the form of (x1, y1, x2, y2).
+            boxes: bounding boxes in the form of (x1, y1, x2, y2).
             labels: labels of boxes.
         """
         return self.augment(img, boxes, labels)
@@ -40,8 +39,7 @@ class TestTransform:
             ToPercentCoords(),
             Resize(size),
             SubtractMeans(mean),
-            lambda img, boxes=None, labels=None: (img / std, boxes, labels),
-            # ToTensor(),
+            DivideByStd(std)
         ])
 
     def __call__(self, image, boxes, labels):
@@ -53,8 +51,7 @@ class PredictionTransform:
         self.transform = Compose([
             Resize(size),
             SubtractMeans(mean),
-            lambda img, boxes=None, labels=None: (img / std, boxes, labels),
-            # ToTensor()
+            DivideByStd(std)
         ])
 
     def __call__(self, image):

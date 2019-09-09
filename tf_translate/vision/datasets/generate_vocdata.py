@@ -4,6 +4,7 @@ import os
 import xml.etree.ElementTree as ET
 from random import random
 
+
 def main(filename):
     # ratio to divide up the images
     train = 0.7
@@ -21,10 +22,10 @@ def main(filename):
     with open(filename, 'r') as labelfile:
         label_string = ""
         for line in labelfile:
-                label_string += line.rstrip()
+            label_string += line.rstrip()
 
     labels = label_string.split(',')
-    labels  = [elem.replace(" ", "") for elem in labels]
+    labels = [elem.replace(" ", "") for elem in labels]
 
     # get image names
     for filename in os.listdir("./JPEGImages"):
@@ -53,9 +54,9 @@ def main(filename):
             annotations[img] = annote_labels
         else:
             print("Missing annotation for ", annote)
-            exit() 
+            exit()
 
-    # divvy up the images to the different sets
+            # divvy up the images to the different sets
     sampler = imgnames.copy()
     train_list = []
     val_list = []
@@ -70,10 +71,9 @@ def main(filename):
         elif dice <= (test + val):
             val_list.append(elem)
         else:
-            train_list.append(elem) 
+            train_list.append(elem)
 
     print("Training set:", len(train_list), "validation set:", len(val_list), "test set:", len(test_list))
-
 
     # create the dataset files
     create_folder("./ImageSets/Main/")
@@ -95,24 +95,25 @@ def main(filename):
 
     # create the individiual files for each label
     for label in labels:
-        with open("./ImageSets/Main/"+ label +"_train.txt", 'w') as outfile:
+        with open("./ImageSets/Main/" + label + "_train.txt", 'w') as outfile:
             for name in train_list:
                 if label in annotations[name]:
                     outfile.write(name + " 1\n")
                 else:
                     outfile.write(name + " -1\n")
-        with open("./ImageSets/Main/"+ label +"_val.txt", 'w') as outfile:
+        with open("./ImageSets/Main/" + label + "_val.txt", 'w') as outfile:
             for name in val_list:
                 if label in annotations[name]:
                     outfile.write(name + " 1\n")
                 else:
                     outfile.write(name + " -1\n")
-        with open("./ImageSets/Main/"+ label +"_test.txt", 'w') as outfile:
+        with open("./ImageSets/Main/" + label + "_test.txt", 'w') as outfile:
             for name in test_list:
                 if label in annotations[name]:
                     outfile.write(name + " 1\n")
                 else:
                     outfile.write(name + " -1\n")
+
 
 def create_folder(foldername):
     if os.path.exists(foldername):
@@ -120,7 +121,8 @@ def create_folder(foldername):
     else:
         os.makedirs(foldername)
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     if len(sys.argv) < 2:
         print("usage: python generate_vocdata.py <labelfile>")
         exit()

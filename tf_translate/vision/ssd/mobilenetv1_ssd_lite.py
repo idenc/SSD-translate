@@ -1,10 +1,10 @@
-import torch
-from torch.nn import Conv2d, Sequential, ModuleList, ReLU, BatchNorm2d
-from ..nn.mobilenet import MobileNetV1
+from tensorflow.python.keras.layers import Conv2D, ReLU, Input, ZeroPadding2D
 
-from .ssd import SSD
-from .predictor import Predictor
+from vision.nn.mobilenet import MobileNet
 from .config import mobilenetv1_ssd_config as config
+from .predictor import Predictor
+from .ssd import SSD
+
 
 
 def SeperableConv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0):
@@ -19,7 +19,7 @@ def SeperableConv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=
 
 
 def create_mobilenetv1_ssd_lite(num_classes, is_test=False):
-    base_net = MobileNetV1(1001).model  # disable dropout layer
+    base_net = MobileNet(1001).model  # disable dropout layer
 
     source_layer_indexes = [
         12,

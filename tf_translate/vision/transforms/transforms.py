@@ -207,11 +207,6 @@ class ToCV2Image(object):
         return tensor.cpu().numpy().astype(np.float32).transpose((1, 2, 0)), boxes, labels
 
 
-# class ToTensor(object):
-#     def __call__(self, cvimage, boxes=None, labels=None):
-#         return torch.from_numpy(cvimage.astype(np.float32)).permute(2, 0, 1), boxes, labels
-
-
 class RandomSampleCrop(object):
     """Crop
     Arguments:
@@ -353,6 +348,14 @@ class RandomMirror(object):
             boxes = boxes.copy()
             boxes[:, 0::2] = width - boxes[:, 2::-2]
         return image, boxes, classes
+
+
+class DivideByStd(object):
+    def __init__(self, std):
+        self.std = std
+
+    def __call__(self, image, boxes, classes):
+        return image / self.std, boxes, classes
 
 
 class SwapChannels(object):
