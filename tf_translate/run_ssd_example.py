@@ -10,7 +10,7 @@ import cv2
 from vision.ssd.mobilenetv1_ssd import create_mobilenetv1_ssd, create_mobilenetv1_ssd_predictor
 
 parser = ArgumentParser(description='Run SSD example')
-parser.add_argument('net_type',
+parser.add_argument('--net_type',
                     choices=['vgg16-ssd', 'mb1-ssd', 'mb1-ssd-lite', 'mb2-ssd-lite', 'sq-ssd-lite'])
 parser.add_argument('--model_path', default='')
 parser.add_argument('--weights_path', default='')

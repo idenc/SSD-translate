@@ -1,6 +1,7 @@
 import logging
 import os
 import pathlib
+import time
 
 import numpy as np
 import tensorflow as tf
@@ -12,7 +13,7 @@ from tensorflow.python import FixedLenFeature, VarLenFeature, parse_single_examp
 class RecordDataset(Sequence):
 
     def __init__(self, root, transform=None, target_transform=None, is_test=False, keep_difficult=False,
-                 batch_size=32, buffer_size=None):
+                 batch_size=32, buffer_size=None, shuffle=True):
         """
         Dataset for TFRecord data.
         Args:
@@ -69,7 +70,8 @@ class RecordDataset(Sequence):
         }
 
         self.dataset = TFRecordDataset([str(image_sets_file)])
-        self.dataset.shuffle(buffer_size=buffer_size)
+        if shuffle:
+            self.dataset.shuffle(buffer_size=buffer_size)
         self.dataset = self.dataset.map(self.parse_sample)
         self.keep_difficult = keep_difficult
         self.num_batches = self.num_records // self.batch_size
@@ -78,16 +80,12 @@ class RecordDataset(Sequence):
         label_file_name = self.root / "label_map.txt"
 
         if os.path.isfile(label_file_name):
-            class_string = ""
+            # Classes should be a text file with class label on each line
+            classes = []
             with open(label_file_name, 'r') as infile:
                 for line in infile:
-                    class_string += line.rstrip()
+                    classes.append(line.rstrip())
 
-            # classes should be a comma separated list
-            classes = class_string.split(',')
-            # prepend BACKGROUND as first class
-            classes.insert(0, 'BACKGROUND')
-            classes = [elem.replace(" ", "") for elem in classes]
             self.class_names = tuple(classes)
             logging.info("VOC Labels read from file: " + str(self.class_names))
 
@@ -103,10 +101,29 @@ class RecordDataset(Sequence):
         self.class_dict = {class_name: i for i, class_name in enumerate(self.class_names)}
 
     def __getitem__(self, idx):
+        start = time.time()
+        inputs, target1, target2 = [], [], []
         for sample in self.dataset.take(self.batch_size):
-            data = self._get_annotation(sample)
-            image = self._get_image(sample)
-            print()
+            boxes, labels, is_difficult = self._get_annotation(sample)
+            if not self.keep_difficult:
+                boxes = boxes[is_difficult == 0]
+                labels = labels[is_difficult == 0]
+            image = self._read_image(sample)
+            if self.transform:
+                image, boxes, labels = self.transform(image, boxes, labels)
+            if self.target_transform:
+                boxes, labels = self.target_transform(boxes, labels)
+            inputs.append(image)
+            target1.append(boxes.numpy())
+            target2.append(labels.numpy())
+
+        tmp_inputs = np.array(inputs, dtype=np.float32)
+        tmp_target1 = np.array(target1)
+        tmp_target2 = np.array(target2)
+        tmp_target2 = np.expand_dims(tmp_target2, 2)
+        tmp_target = np.concatenate([tmp_target1, tmp_target2], axis=2)
+        print("time to read in batch of tfrecord", time.time() - start)
+        return tmp_inputs, tmp_target
 
     def __len__(self):
         return int(np.ceil(self.num_records / float(self.batch_size)))
@@ -127,13 +144,15 @@ class RecordDataset(Sequence):
             y_min = int(sample['image/object/bbox/ymin'].values[i].numpy() * height)
             boxes.append([x_min, y_min, x_max, y_max])
 
-            labels.append(sample['image/object/class/label'][i])
-            is_difficult.append(sample['image/object/difficult'][i])
+            labels.append(sample['image/object/class/label'].values[i].numpy())
+            is_difficult.append(sample['image/object/difficult'].values[i].numpy())
 
-        return boxes, labels, is_difficult
+        return (np.array(boxes, dtype=np.float32),
+                np.array(labels, dtype=np.int64),
+                np.array(is_difficult, dtype=np.uint8))
 
-    def _get_image(self, sample):
-        return tf.image.decode_image(sample['image/encoded'])
+    def _read_image(self, sample):
+        return tf.image.decode_image(sample['image/encoded']).numpy()
 
     def parse_sample(self, data_record):
         sample = parse_single_example(data_record, self.keys_to_features)

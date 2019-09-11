@@ -8,7 +8,7 @@ from .ssd import SSD
 
 def create_mobilenetv1_ssd(num_classes, is_test=False, is_train=False):
     base_net = MobileNet(input_shape=(300, 300, 3),
-                         include_top=False, weights=None)  # disable dropout layer
+                         include_top=False)  # disable dropout layer
 
     source_layer_indexes = [
         73,

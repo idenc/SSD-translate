@@ -292,7 +292,7 @@ if __name__ == '__main__':
                              center_variance=0.1, size_variance=0.2)
     optimizer = tf.keras.optimizers.SGD(lr=args.lr, momentum=args.momentum, decay=args.weight_decay)
     model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
-        filepath=str(args.net) + "-Epoch-{epoch:02d}-Loss-{val_loss:.2f}.h5",
+        filepath="models/" + str(args.net) + "-Epoch-{epoch:02d}-Loss-{val_loss:.2f}.h5",
         monitor='val_loss',
         verbose=1,
         save_best_only=True,
@@ -312,8 +312,8 @@ if __name__ == '__main__':
                  + f"Extra Layers learning rate: {extra_layers_lr}.")
 
     # input, y_true = datasets[0]
-    #
-    # y_pred = net.ssd(input)
+    # with tf.device('/CPU:0'):
+    #     y_pred = net.ssd(input)
     # loss = criterion.forward(y_true, y_pred)
 
     net.ssd.compile(optimizer=optimizer, loss=criterion.forward, metrics=['accuracy'])

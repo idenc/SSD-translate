@@ -153,6 +153,17 @@ def iou_of(boxes0, boxes1, eps=1e-5):
     area1 = area_of(boxes1[..., :2], boxes1[..., 2:])
     return overlap_area / (area0 + area1 - overlap_area + eps)
 
+def my_argmax(a):
+    """
+    Modified argmax that breaks ties using index of last value
+    :param a: Array to take argmax of
+    :return: Indices of maximum value in each dim
+    """
+    rows = np.where(a == a.max(axis=1)[:, None])[0]
+    rows_multiple_max = rows[:-1][rows[:-1] == rows[1:]]
+    my_argmax = a.argmax(axis=1)
+    my_argmax[rows_multiple_max] = a.shape[1] - 1
+    return my_argmax
 
 def assign_priors(gt_boxes, gt_labels, corner_form_priors,
                   iou_threshold):
@@ -169,7 +180,7 @@ def assign_priors(gt_boxes, gt_labels, corner_form_priors,
     # size: num_priors x num_targets
     ious = iou_of(np.expand_dims(gt_boxes, 0), np.expand_dims(corner_form_priors, 1))
     # size: num_priors
-    best_target_per_prior_index = tf.Variable(tf.argmax(ious, 1))
+    best_target_per_prior_index = tf.Variable(my_argmax(ious.numpy()))
     best_target_per_prior = tf.Variable(tf.math.reduce_max(ious, 1))
     # size: num_targets
     best_prior_per_target_index = tf.argmax(ious, 0)

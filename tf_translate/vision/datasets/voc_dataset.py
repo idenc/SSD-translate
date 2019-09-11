@@ -2,6 +2,7 @@ import logging
 import os
 import pathlib
 import xml.etree.ElementTree as ET
+import time
 
 import cv2
 import numpy as np
@@ -11,7 +12,7 @@ from tensorflow.python.keras.utils.data_utils import Sequence
 class VOCDataset(Sequence):
 
     def __init__(self, root, transform=None, target_transform=None, is_test=False, keep_difficult=False,
-                 batch_size=32):
+                 batch_size=32, shuffle=True):
         """Dataset for VOC data.
         Args:
             root: the root of the VOC2007 or VOC2012 dataset, the directory contains the following sub-directories:
@@ -29,6 +30,7 @@ class VOCDataset(Sequence):
         self.keep_difficult = keep_difficult
         self.num_records = len(self.ids)
         self.num_batches = self.num_records // self.batch_size
+        self.shuffle = shuffle
 
         # if the labels file exists, read in the class names
         label_file_name = self.root / "labels.txt"
@@ -60,12 +62,14 @@ class VOCDataset(Sequence):
         self.class_dict = {class_name: i for i, class_name in enumerate(self.class_names)}
 
     def __getitem__(self, idx):
+        start = time.time()
         inputs, target1, target2 = [], [], []
         end = (idx + 1) * self.batch_size
         if end >= self.num_records:
             end = self.num_records
         idxs = np.arange(idx * self.batch_size, end)
-        np.random.shuffle(idxs)
+        if self.shuffle:
+            np.random.shuffle(idxs)
         for j, i in enumerate(idxs):
             image_id = self.ids[i]
             boxes, labels, is_difficult = self._get_annotation(image_id)
@@ -87,6 +91,7 @@ class VOCDataset(Sequence):
                 tmp_target2 = np.array(target2)
                 tmp_target2 = np.expand_dims(tmp_target2, 2)
                 tmp_target = np.concatenate([tmp_target1, tmp_target2], axis=2)
+                print("time to read in voc batch", time.time() - start)
                 return tmp_inputs, tmp_target
 
     def get_image(self, index):
