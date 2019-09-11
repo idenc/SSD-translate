@@ -27,7 +27,8 @@ class VOCDataset(Sequence):
             image_sets_file = self.root / "ImageSets/Main/trainval.txt"
         self.ids = VOCDataset._read_image_ids(image_sets_file)
         self.keep_difficult = keep_difficult
-        self.num_batches = len(self.ids) // self.batch_size
+        self.num_records = len(self.ids)
+        self.num_batches = self.num_records // self.batch_size
 
         # if the labels file exists, read in the class names
         label_file_name = self.root / "labels.txt"
@@ -61,8 +62,8 @@ class VOCDataset(Sequence):
     def __getitem__(self, idx):
         inputs, target1, target2 = [], [], []
         end = (idx + 1) * self.batch_size
-        if end >= len(self.ids):
-            end = len(self.ids) - 1
+        if end >= self.num_records:
+            end = self.num_records
         idxs = np.arange(idx * self.batch_size, end)
         np.random.shuffle(idxs)
         for j, i in enumerate(idxs):
@@ -77,10 +78,10 @@ class VOCDataset(Sequence):
             if self.target_transform:
                 boxes, labels = self.target_transform(boxes, labels)
             inputs.append(image)
-            target1.append(boxes)
-            target2.append(labels)
+            target1.append(boxes.numpy())
+            target2.append(labels.numpy())
 
-            if len(target1) == self.batch_size:
+            if len(target1) == self.batch_size or j == end - 1:
                 tmp_inputs = np.array(inputs, dtype=np.float32)
                 tmp_target1 = np.array(target1)
                 tmp_target2 = np.array(target2)
@@ -100,7 +101,7 @@ class VOCDataset(Sequence):
         return image_id, self._get_annotation(image_id)
 
     def __len__(self):
-        return int(np.ceil(len(self.ids) / float(self.batch_size)))
+        return int(np.ceil(self.num_records / float(self.batch_size)))
 
     @staticmethod
     def _read_image_ids(image_sets_file):

@@ -15,6 +15,7 @@ from vision.datasets.open_images import OpenImagesDataset
 # from vision.ssd.squeezenet_ssd_lite import create_squeezenet_ssd_lite
 from vision.datasets.voc_dataset import VOCDataset
 from vision.datasets.concat_datasets import ConcatDataset
+from vision.datasets.tfrecord_dataset import RecordDataset
 from vision.nn.multibox_loss import MultiboxLoss
 from vision.ssd.config import mobilenetv1_ssd_config
 from vision.ssd.config import squeezenet_ssd_config
@@ -142,8 +143,6 @@ parser.add_argument('--momentum', default=0.9, type=float,
                     help='Momentum value for optim')
 parser.add_argument('--weight_decay', default=5e-4, type=float,
                     help='Weight decay for SGD')
-parser.add_argument('--gamma', default=0.1, type=float,
-                    help='Gamma update for SGD')
 parser.add_argument('--base_net_lr', default=None, type=float,
                     help='initial learning rate for base net.')
 parser.add_argument('--extra_layers_lr', default=None, type=float,
@@ -163,6 +162,7 @@ parser.add_argument('--num_epochs', default=120, type=int,
                     help='the number epochs')
 parser.add_argument('--num_workers', default=6, type=int,
                     help='Number of workers used in dataloading')
+parser.add_argument('--max_queue_size', default=10, type=int, help='Max number of batches to queue for training')
 parser.add_argument('--validation_epochs', default=5, type=int,
                     help='the number epochs')
 parser.add_argument('--debug_steps', default=100, type=int,
@@ -203,7 +203,6 @@ if __name__ == '__main__':
     train_transform = TrainAugmentation(config.image_size, config.image_mean, config.image_std)
     target_transform = MatchPrior(config.priors, config.center_variance,
                                   config.size_variance, 0.5)
-
     test_transform = TestTransform(config.image_size, config.image_mean, config.image_std)
 
     logging.info("Prepare training datasets.")
@@ -223,6 +222,12 @@ if __name__ == '__main__':
             store_labels(label_file, dataset.class_names)
             logging.info(dataset)
             num_classes = len(dataset.class_names)
+        elif args.dataset_type == 'tfrecord':
+            dataset = RecordDataset(dataset_path, transform=train_transform, target_transform=target_transform,
+                                    batch_size=args.batch_size)
+            label_file = os.path.join(args.checkpoint_folder, "tfrecord-model-labels.txt")
+            store_labels(label_file, dataset.class_names)
+            num_classes = len(dataset.class_names)
         else:
             raise ValueError(f"Dataset type {args.dataset_type} is not supported.")
         datasets.append(dataset)
@@ -231,7 +236,7 @@ if __name__ == '__main__':
     logging.info("Train dataset size: {}".format(datasets.data_length))
 
     logging.info("Prepare Validation datasets.")
-    if args.dataset_type == "voc":
+    if args.dataset_type == "voc" or args.dataset_type == 'tfrecord':
         val_dataset = VOCDataset(args.validation_dataset, transform=test_transform,
                                  target_transform=target_transform, is_test=True, batch_size=args.batch_size)
     elif args.dataset_type == 'open_images':
@@ -239,7 +244,7 @@ if __name__ == '__main__':
                                         transform=test_transform, target_transform=target_transform,
                                         dataset_type="test")
         logging.info(val_dataset)
-    logging.info("validation dataset size: {}".format(len(val_dataset.ids)))
+    logging.info("validation dataset size: {}".format(val_dataset.num_records))
 
     logging.info("Build network.")
     timer.start("Create Model")
@@ -280,14 +285,14 @@ if __name__ == '__main__':
         net.init_from_base_net(args.base_net)
     elif args.pretrained_ssd:
         logging.info(f"Init from pretrained ssd {args.pretrained_ssd}")
-        net.init_from_pretrained_ssd(args.pretrained_ssd)
+        net.ssd.load_weights(args.pretrained_ssd, by_name=True)
     logging.info(f'Took {timer.end("Load Model"):.2f} seconds to load the model.')
 
     criterion = MultiboxLoss(config.priors, iou_threshold=0.5, neg_pos_ratio=3,
                              center_variance=0.1, size_variance=0.2)
     optimizer = tf.keras.optimizers.SGD(lr=args.lr, momentum=args.momentum, decay=args.weight_decay)
-    model_checkpoint = SaveModel(
-        filepath="{args.net}-Epoch-{epoch:02d}-Loss-{val_loss:.2f}.h5",
+    model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
+        filepath=str(args.net) + "-Epoch-{epoch:02d}-Loss-{val_loss:.2f}.h5",
         monitor='val_loss',
         verbose=1,
         save_best_only=True,
@@ -306,6 +311,11 @@ if __name__ == '__main__':
     logging.info(f"Learning rate: {args.lr}, Base net learning rate: {base_net_lr}, "
                  + f"Extra Layers learning rate: {extra_layers_lr}.")
 
+    # input, y_true = datasets[0]
+    #
+    # y_pred = net.ssd(input)
+    # loss = criterion.forward(y_true, y_pred)
+
     net.ssd.compile(optimizer=optimizer, loss=criterion.forward, metrics=['accuracy'])
     logging.info(f"Start training from epoch {last_epoch}.")
     net.ssd.fit_generator(datasets,
@@ -313,4 +323,5 @@ if __name__ == '__main__':
                           epochs=args.num_epochs, verbose=1,
                           callbacks=callbacks, validation_data=val_dataset,
                           validation_steps=len(val_dataset),
-                          initial_epoch=last_epoch, use_multiprocessing=True, workers=args.num_workers)
+                          initial_epoch=last_epoch, use_multiprocessing=False,
+                          workers=args.num_workers, max_queue_size=args.max_queue_size)

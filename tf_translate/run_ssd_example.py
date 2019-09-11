@@ -45,7 +45,7 @@ else:
 if args.model_path != '':
     net.load(args.model_path)
 else:
-    net.ssd.load_weights(args.weights_path)
+    net.ssd.load_weights(args.weights_path, by_name=True)
 
 # net.base_net.reset_states()
 if net_type == 'vgg16-ssd':

@@ -17,7 +17,7 @@ class ConcatDataset(Sequence):
         self.datasets = datasets
         self.data_length = 0
         for dataset in datasets:
-            self.data_length += len(dataset.ids)
+            self.data_length += dataset.num_records
         self.cumulative_sizes = self.cumsum(self.datasets)
         self.batch_size = datasets[0].batch_size
 
