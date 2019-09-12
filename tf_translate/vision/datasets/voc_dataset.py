@@ -2,7 +2,6 @@ import logging
 import os
 import pathlib
 import xml.etree.ElementTree as ET
-import time
 
 import cv2
 import numpy as np
@@ -62,7 +61,6 @@ class VOCDataset(Sequence):
         self.class_dict = {class_name: i for i, class_name in enumerate(self.class_names)}
 
     def __getitem__(self, idx):
-        start = time.time()
         inputs, target1, target2 = [], [], []
         end = (idx + 1) * self.batch_size
         if end >= self.num_records:
@@ -91,7 +89,6 @@ class VOCDataset(Sequence):
                 tmp_target2 = np.array(target2)
                 tmp_target2 = np.expand_dims(tmp_target2, 2)
                 tmp_target = np.concatenate([tmp_target1, tmp_target2], axis=2)
-                print("time to read in voc batch", time.time() - start)
                 return tmp_inputs, tmp_target
 
     def get_image(self, index):

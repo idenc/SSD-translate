@@ -63,10 +63,10 @@ class SaveModel(tf.keras.callbacks.ModelCheckpoint):
     def _save_model(self, epoch, logs):
         """Saves the model.
 
-            Arguments:
-                epoch: the epoch this iteration is in.
-                logs: the `logs` dict passed in to `on_batch_end` or `on_epoch_end`.
-            """
+        Arguments:
+            epoch: the epoch this iteration is in.
+            logs: the `logs` dict passed in to `on_batch_end` or `on_epoch_end`.
+        """
         logs = logs or {}
 
         if isinstance(self.save_freq,
@@ -89,7 +89,7 @@ class SaveModel(tf.keras.callbacks.ModelCheckpoint):
                         if self.save_weights_only:
                             self.model.save_weights(filepath, overwrite=True)
                         else:
-                            tf.keras.models.save_model(self.model, filepath, save_format='tf')
+                            self.model.save(filepath, overwrite=True)
                     else:
                         if self.verbose > 0:
                             print('\nEpoch %05d: %s did not improve from %0.5f' %
@@ -100,7 +100,7 @@ class SaveModel(tf.keras.callbacks.ModelCheckpoint):
                 if self.save_weights_only:
                     self.model.save_weights(filepath, overwrite=True)
                 else:
-                    tf.keras.models.save_model(self.model, filepath, save_format='tf')
+                    self.model.save(filepath, overwrite=True)
 
             self._maybe_remove_file(file_handle, filepath)
 
@@ -115,7 +115,7 @@ def lr_schedule(epoch):
 
 
 parser = argparse.ArgumentParser(
-    description='Single Shot MultiBox Detector Training With Pytorch')
+    description='Single Shot MultiBox Detector Training With Tensorflow 2.0')
 
 parser.add_argument("--dataset_type", default="voc", type=str,
                     help='Specify dataset type. Currently support voc and open_images.')
@@ -163,10 +163,6 @@ parser.add_argument('--num_epochs', default=120, type=int,
 parser.add_argument('--num_workers', default=6, type=int,
                     help='Number of workers used in dataloading')
 parser.add_argument('--max_queue_size', default=10, type=int, help='Max number of batches to queue for training')
-parser.add_argument('--validation_epochs', default=5, type=int,
-                    help='the number epochs')
-parser.add_argument('--debug_steps', default=100, type=int,
-                    help='Set the debug log output frequency.')
 parser.add_argument('--use_cuda', default=True, type=str2bool,
                     help='Use CUDA to train model')
 
@@ -179,8 +175,11 @@ args = parser.parse_args()
 
 if __name__ == '__main__':
     timer = Timer()
-
     logging.info(args)
+
+    """
+    Get net type
+    """
     if args.net == 'vgg16-ssd':
         create_net = create_vgg_ssd
         config = vgg_ssd_config
@@ -200,11 +199,18 @@ if __name__ == '__main__':
         logging.fatal("The net type is wrong.")
         parser.print_help(sys.stderr)
         sys.exit(1)
+
+    """
+    Get Image augmentation classes
+    """
     train_transform = TrainAugmentation(config.image_size, config.image_mean, config.image_std)
     target_transform = MatchPrior(config.priors, config.center_variance,
                                   config.size_variance, 0.5)
     test_transform = TestTransform(config.image_size, config.image_mean, config.image_std)
 
+    """
+    Prepare the training datasets
+    """
     logging.info("Prepare training datasets.")
     datasets = []
     for dataset_path in args.datasets:
@@ -235,7 +241,10 @@ if __name__ == '__main__':
     logging.info(f"Stored labels into file {label_file}.")
     logging.info("Train dataset size: {}".format(datasets.data_length))
 
-    logging.info("Prepare Validation datasets.")
+    """
+    Get Validation dataset
+    """
+    logging.info("Prepare Validation dataset.")
     if args.dataset_type == "voc" or args.dataset_type == 'tfrecord':
         val_dataset = VOCDataset(args.validation_dataset, transform=test_transform,
                                  target_transform=target_transform, is_test=True, batch_size=args.batch_size)
@@ -246,6 +255,9 @@ if __name__ == '__main__':
         logging.info(val_dataset)
     logging.info("validation dataset size: {}".format(val_dataset.num_records))
 
+    """
+    Build the network
+    """
     logging.info("Build network.")
     timer.start("Create Model")
     net = create_net(num_classes, is_train=True)
@@ -276,6 +288,9 @@ if __name__ == '__main__':
         params = itertools.chain(net.regression_headers.parameters(), net.classification_headers.parameters())
         logging.info("Freeze all the layers except prediction heads.")
 
+    """
+    Load any specified weights before training
+    """
     timer.start("Load Model")
     if args.resume:
         logging.info(f"Resume from the model {args.resume}")
@@ -288,6 +303,9 @@ if __name__ == '__main__':
         net.ssd.load_weights(args.pretrained_ssd, by_name=True)
     logging.info(f'Took {timer.end("Load Model"):.2f} seconds to load the model.')
 
+    """
+    Set up loss, optimizer, and callbacks
+    """
     criterion = MultiboxLoss(config.priors, iou_threshold=0.5, neg_pos_ratio=3,
                              center_variance=0.1, size_variance=0.2)
     optimizer = tf.keras.optimizers.SGD(lr=args.lr, momentum=args.momentum, decay=args.weight_decay)
@@ -303,7 +321,7 @@ if __name__ == '__main__':
                                                      verbose=0,
                                                      mode='auto', baseline=None,
                                                      restore_best_weights=True)
-    tensorboard = tf.keras.callbacks.TensorBoard()
+    tensorboard = tf.keras.callbacks.TensorBoard()  # Not used, add to callbacks list to use
     plot = PlotLosses()
     lr_scheduler = tf.keras.callbacks.LearningRateScheduler(lr_schedule, verbose=1)
     callbacks = [model_checkpoint, early_stopper, plot, lr_scheduler]
@@ -316,6 +334,9 @@ if __name__ == '__main__':
     #     y_pred = net.ssd(input)
     # loss = criterion.forward(y_true, y_pred)
 
+    """
+    Begin training
+    """
     net.ssd.compile(optimizer=optimizer, loss=criterion.forward, metrics=['accuracy'])
     logging.info(f"Start training from epoch {last_epoch}.")
     net.ssd.fit_generator(datasets,

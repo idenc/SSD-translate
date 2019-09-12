@@ -1,28 +1,30 @@
-import torch
-from vision.ssd.vgg_ssd import create_vgg_ssd, create_vgg_ssd_predictor
-from vision.ssd.mobilenetv1_ssd import create_mobilenetv1_ssd, create_mobilenetv1_ssd_predictor
-from vision.ssd.mobilenetv1_ssd_lite import create_mobilenetv1_ssd_lite, create_mobilenetv1_ssd_lite_predictor
-from vision.ssd.squeezenet_ssd_lite import create_squeezenet_ssd_lite, create_squeezenet_ssd_lite_predictor
-from vision.datasets.voc_dataset import VOCDataset
+import argparse
+import logging
+import pathlib
+import sys
+
+import numpy as np
+import tensorflow as tf
+
 from vision.datasets.open_images import OpenImagesDataset
+from vision.datasets.voc_dataset import VOCDataset
+# from vision.ssd.mobilenet_v2_ssd_lite import create_mobilenetv2_ssd_lite, create_mobilenetv2_ssd_lite_predictor
+from vision.ssd.mobilenetv1_ssd import create_mobilenetv1_ssd, create_mobilenetv1_ssd_predictor
+# from vision.ssd.mobilenetv1_ssd_lite import create_mobilenetv1_ssd_lite, create_mobilenetv1_ssd_lite_predictor
+# from vision.ssd.squeezenet_ssd_lite import create_squeezenet_ssd_lite, create_squeezenet_ssd_lite_predictor
+from vision.ssd.vgg_ssd import create_vgg_ssd, create_vgg_ssd_predictor
 from vision.utils import box_utils, measurements
 from vision.utils.misc import str2bool, Timer
-import argparse
-import pathlib
-import numpy as np
-import logging
-import sys
-from vision.ssd.mobilenet_v2_ssd_lite import create_mobilenetv2_ssd_lite, create_mobilenetv2_ssd_lite_predictor
-
 
 parser = argparse.ArgumentParser(description="SSD Evaluation on VOC Dataset.")
-parser.add_argument('--net', default="vgg16-ssd",
-                    help="The network architecture, it should be of mb1-ssd, mb1-ssd-lite, mb2-ssd-lite or vgg16-ssd.")
-parser.add_argument("--trained_model", type=str)
+parser.add_argument('--net', default="mb1-ssd",
+                    choices=['vgg16-ssd', 'mb1-ssd', 'mb1-ssd-lite', 'mb2-ssd-lite', 'sq-ssd-lite'],
+                    help="The network architecture, it can be mb1-ssd, mb1-lite-ssd, mb2-ssd-lite or vgg16-ssd.")
+parser.add_argument("--trained_model", type=str, help="path to trained model")
 
 parser.add_argument("--dataset_type", default="voc", type=str,
-                    help='Specify dataset type. Currently support voc and open_images.')
-parser.add_argument("--dataset", type=str, help="The root directory of the VOC dataset or Open Images dataset.")
+                    help='Specify dataset type. Currently support voc, open_images, and TFRecords.')
+parser.add_argument("--dataset", type=str, help="The root directory of the dataset.")
 parser.add_argument("--label_file", type=str, help="The label file path.")
 parser.add_argument("--use_cuda", type=str2bool, default=True)
 parser.add_argument("--use_2007_metric", type=str2bool, default=True)
@@ -32,7 +34,6 @@ parser.add_argument("--eval_dir", default="eval_results", type=str, help="The di
 parser.add_argument('--mb2_width_mult', default=1.0, type=float,
                     help='Width Multiplifier for MobilenetV2')
 args = parser.parse_args()
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() and args.use_cuda else "cpu")
 
 
 def group_annotation_by_class(dataset):
@@ -42,7 +43,6 @@ def group_annotation_by_class(dataset):
     for i in range(len(dataset)):
         image_id, annotation = dataset.get_annotation(i)
         gt_boxes, classes, is_difficult = annotation
-        gt_boxes = torch.from_numpy(gt_boxes)
         for i, difficult in enumerate(is_difficult):
             class_index = int(classes[i])
             gt_box = gt_boxes[i]
@@ -55,17 +55,15 @@ def group_annotation_by_class(dataset):
                 all_gt_boxes[class_index][image_id] = []
             all_gt_boxes[class_index][image_id].append(gt_box)
             if class_index not in all_difficult_cases:
-                all_difficult_cases[class_index]={}
+                all_difficult_cases[class_index] = {}
             if image_id not in all_difficult_cases[class_index]:
                 all_difficult_cases[class_index][image_id] = []
             all_difficult_cases[class_index][image_id].append(difficult)
 
     for class_index in all_gt_boxes:
         for image_id in all_gt_boxes[class_index]:
-            all_gt_boxes[class_index][image_id] = torch.stack(all_gt_boxes[class_index][image_id])
-    for class_index in all_difficult_cases:
-        for image_id in all_difficult_cases[class_index]:
-            all_gt_boxes[class_index][image_id] = torch.tensor(all_gt_boxes[class_index][image_id])
+            all_gt_boxes[class_index][image_id] = tf.stack(all_gt_boxes[class_index][image_id])
+
     return true_case_stat, all_gt_boxes, all_difficult_cases
 
 
@@ -79,7 +77,7 @@ def compute_average_precision_per_class(num_true_cases, gt_boxes, difficult_case
             t = line.rstrip().split(" ")
             image_ids.append(t[0])
             scores.append(float(t[1]))
-            box = torch.tensor([float(v) for v in t[2:]]).unsqueeze(0)
+            box = [float(v) for v in t[2:]]
             box -= 1.0  # convert to python format where indexes start from 0
             boxes.append(box)
         scores = np.array(scores)
@@ -97,8 +95,8 @@ def compute_average_precision_per_class(num_true_cases, gt_boxes, difficult_case
 
             gt_box = gt_boxes[image_id]
             ious = box_utils.iou_of(box, gt_box)
-            max_iou = torch.max(ious).item()
-            max_arg = torch.argmax(ious).item()
+            max_iou = tf.keras.backend.max(ious).numpy()
+            max_arg = tf.keras.backend.argmax(ious).numpy()
             if max_iou > iou_threshold:
                 if difficult_cases[image_id][max_arg] == 0:
                     if (image_id, max_arg) not in matched:
@@ -125,6 +123,7 @@ if __name__ == '__main__':
     timer = Timer()
     class_names = [name.strip() for name in open(args.label_file).readlines()]
 
+    dataset = None
     if args.dataset_type == "voc":
         dataset = VOCDataset(args.dataset, is_test=True)
     elif args.dataset_type == 'open_images':
@@ -144,22 +143,21 @@ if __name__ == '__main__':
     else:
         logging.fatal("The net type is wrong. It should be one of vgg16-ssd, mb1-ssd and mb1-ssd-lite.")
         parser.print_help(sys.stderr)
-        sys.exit(1)  
+        sys.exit(1)
 
     timer.start("Load Model")
-    net.load(args.trained_model)
-    net = net.to(DEVICE)
+    net.ssd.load_weights(args.trained_model, by_name=True)
     print(f'It took {timer.end("Load Model")} seconds to load the model.')
     if args.net == 'vgg16-ssd':
-        predictor = create_vgg_ssd_predictor(net, nms_method=args.nms_method, device=DEVICE)
+        predictor = create_vgg_ssd_predictor(net, nms_method=args.nms_method)
     elif args.net == 'mb1-ssd':
-        predictor = create_mobilenetv1_ssd_predictor(net, nms_method=args.nms_method, device=DEVICE)
+        predictor = create_mobilenetv1_ssd_predictor(net, nms_method=args.nms_method)
     elif args.net == 'mb1-ssd-lite':
-        predictor = create_mobilenetv1_ssd_lite_predictor(net, nms_method=args.nms_method, device=DEVICE)
+        predictor = create_mobilenetv1_ssd_lite_predictor(net, nms_method=args.nms_method)
     elif args.net == 'sq-ssd-lite':
-        predictor = create_squeezenet_ssd_lite_predictor(net,nms_method=args.nms_method, device=DEVICE)
+        predictor = create_squeezenet_ssd_lite_predictor(net, nms_method=args.nms_method)
     elif args.net == 'mb2-ssd-lite':
-        predictor = create_mobilenetv2_ssd_lite_predictor(net, nms_method=args.nms_method, device=DEVICE)
+        predictor = create_mobilenetv2_ssd_lite_predictor(net, nms_method=args.nms_method)
     else:
         logging.fatal("The net type is wrong. It should be one of vgg16-ssd, mb1-ssd and mb1-ssd-lite.")
         parser.print_help(sys.stderr)
@@ -172,22 +170,24 @@ if __name__ == '__main__':
         image = dataset.get_image(i)
         print("Load Image: {:4f} seconds.".format(timer.end("Load Image")))
         timer.start("Predict")
-        boxes, labels, probs = predictor.predict(image)
+        with tf.device('/cpu:0'):
+            boxes, labels, probs = predictor.predict(image)
         print("Prediction: {:4f} seconds.".format(timer.end("Predict")))
-        indexes = torch.ones(labels.size(0), 1, dtype=torch.float32) * i
-        results.append(torch.cat([
+        indexes = np.ones(labels.shape[0], dtype=np.float32) * i
+        results.append(tf.keras.layers.concatenate([
             indexes.reshape(-1, 1),
-            labels.reshape(-1, 1).float(),
-            probs.reshape(-1, 1),
+            tf.reshape(labels, (-1, 1)),
+            tf.reshape(probs, (-1, 1)),
             boxes + 1.0  # matlab's indexes start from 1
-        ], dim=1))
-    results = torch.cat(results)
+        ], axis=1))
+    results = np.array(results)
     for class_index, class_name in enumerate(class_names):
-        if class_index == 0: continue  # ignore background
+        if class_index == 0:
+            continue  # ignore background
         prediction_path = eval_path / f"det_test_{class_name}.txt"
         with open(prediction_path, "w") as f:
             sub = results[results[:, 1] == class_index, :]
-            for i in range(sub.size(0)):
+            for i in range(sub.shape[0]):
                 prob_box = sub[i, 2:].numpy()
                 image_id = dataset.ids[int(sub[i, 0])]
                 print(
@@ -211,7 +211,4 @@ if __name__ == '__main__':
         aps.append(ap)
         print(f"{class_name}: {ap}")
 
-    print(f"\nAverage Precision Across All Classes:{sum(aps)/len(aps)}")
-
-
-
+    print(f"\nAverage Precision Across All Classes:{sum(aps) / len(aps)}")

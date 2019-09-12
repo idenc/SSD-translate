@@ -1,7 +1,6 @@
 import logging
 import os
 import pathlib
-import time
 
 import numpy as np
 import tensorflow as tf
@@ -101,7 +100,6 @@ class RecordDataset(Sequence):
         self.class_dict = {class_name: i for i, class_name in enumerate(self.class_names)}
 
     def __getitem__(self, idx):
-        start = time.time()
         inputs, target1, target2 = [], [], []
         for sample in self.dataset.take(self.batch_size):
             boxes, labels, is_difficult = self._get_annotation(sample)
@@ -122,7 +120,6 @@ class RecordDataset(Sequence):
         tmp_target2 = np.array(target2)
         tmp_target2 = np.expand_dims(tmp_target2, 2)
         tmp_target = np.concatenate([tmp_target1, tmp_target2], axis=2)
-        print("time to read in batch of tfrecord", time.time() - start)
         return tmp_inputs, tmp_target
 
     def __len__(self):
