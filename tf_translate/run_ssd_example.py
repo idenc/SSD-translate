@@ -1,9 +1,10 @@
-# from vision.ssd.vgg_ssd import create_vgg_ssd, create_vgg_ssd_predictor
+from vision.ssd.vgg_ssd import create_vgg_ssd, create_vgg_ssd_predictor
 import sys
 # from vision.ssd.mobilenetv1_ssd_lite import create_mobilenetv1_ssd_lite, create_mobilenetv1_ssd_lite_predictor
 # from vision.ssd.squeezenet_ssd_lite import create_squeezenet_ssd_lite, create_squeezenet_ssd_lite_predictor
 # from vision.ssd.mobilenet_v2_ssd_lite import create_mobilenetv2_ssd_lite, create_mobilenetv2_ssd_lite_predictor
 from argparse import ArgumentParser
+from tensorflow.python.keras.models import save_model
 
 import cv2
 
@@ -61,6 +62,7 @@ elif net_type == 'sq-ssd-lite':
 else:
     predictor = create_vgg_ssd_predictor(net, candidate_size=200)
 
+net.ssd.save('models\\keras_ssd')
 orig_image = cv2.imread(image_path)
 image = cv2.cvtColor(orig_image, cv2.COLOR_BGR2RGB)
 boxes, labels, probs = predictor.predict(image, 10, 0.4)

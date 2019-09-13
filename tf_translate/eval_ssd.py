@@ -12,7 +12,7 @@ from vision.datasets.voc_dataset import VOCDataset
 from vision.ssd.mobilenetv1_ssd import create_mobilenetv1_ssd, create_mobilenetv1_ssd_predictor
 # from vision.ssd.mobilenetv1_ssd_lite import create_mobilenetv1_ssd_lite, create_mobilenetv1_ssd_lite_predictor
 # from vision.ssd.squeezenet_ssd_lite import create_squeezenet_ssd_lite, create_squeezenet_ssd_lite_predictor
-from vision.ssd.vgg_ssd import create_vgg_ssd, create_vgg_ssd_predictor
+# from vision.ssd.vgg_ssd import create_vgg_ssd, create_vgg_ssd_predictor
 from vision.utils import box_utils, measurements
 from vision.utils.misc import str2bool, Timer
 
@@ -20,12 +20,12 @@ parser = argparse.ArgumentParser(description="SSD Evaluation on VOC Dataset.")
 parser.add_argument('--net', default="mb1-ssd",
                     choices=['vgg16-ssd', 'mb1-ssd', 'mb1-ssd-lite', 'mb2-ssd-lite', 'sq-ssd-lite'],
                     help="The network architecture, it can be mb1-ssd, mb1-lite-ssd, mb2-ssd-lite or vgg16-ssd.")
-parser.add_argument("--trained_model", type=str, help="path to trained model")
+parser.add_argument("--trained_model", type=str, help="path to trained model", required=True)
 
 parser.add_argument("--dataset_type", default="voc", type=str,
                     help='Specify dataset type. Currently support voc, open_images, and TFRecords.')
-parser.add_argument("--dataset", type=str, help="The root directory of the dataset.")
-parser.add_argument("--label_file", type=str, help="The label file path.")
+parser.add_argument("--dataset", type=str, help="The root directory of the dataset.", required=True)
+parser.add_argument("--label_file", type=str, help="The label file path.", required=True)
 parser.add_argument("--use_cuda", type=str2bool, default=True)
 parser.add_argument("--use_2007_metric", type=str2bool, default=True)
 parser.add_argument("--nms_method", type=str, default="hard")
@@ -40,7 +40,7 @@ def group_annotation_by_class(dataset):
     true_case_stat = {}
     all_gt_boxes = {}
     all_difficult_cases = {}
-    for i in range(len(dataset)):
+    for i in range(dataset.num_records):
         image_id, annotation = dataset.get_annotation(i)
         gt_boxes, classes, is_difficult = annotation
         for i, difficult in enumerate(is_difficult):
@@ -77,8 +77,8 @@ def compute_average_precision_per_class(num_true_cases, gt_boxes, difficult_case
             t = line.rstrip().split(" ")
             image_ids.append(t[0])
             scores.append(float(t[1]))
-            box = [float(v) for v in t[2:]]
-            box -= 1.0  # convert to python format where indexes start from 0
+            box = tf.convert_to_tensor([float(v) for v in t[2:]])
+            box = tf.subtract(box, 1)  # convert to python format where indexes start from 0
             boxes.append(box)
         scores = np.array(scores)
         sorted_indexes = np.argsort(-scores)
@@ -164,29 +164,29 @@ if __name__ == '__main__':
         sys.exit(1)
 
     results = []
-    for i in range(len(dataset)):
+    for i in range(dataset.num_records):
         print("process image", i)
         timer.start("Load Image")
         image = dataset.get_image(i)
         print("Load Image: {:4f} seconds.".format(timer.end("Load Image")))
         timer.start("Predict")
-        with tf.device('/cpu:0'):
-            boxes, labels, probs = predictor.predict(image)
+        boxes, labels, probs = predictor.predict(image)
         print("Prediction: {:4f} seconds.".format(timer.end("Predict")))
-        indexes = np.ones(labels.shape[0], dtype=np.float32) * i
-        results.append(tf.keras.layers.concatenate([
-            indexes.reshape(-1, 1),
-            tf.reshape(labels, (-1, 1)),
+        indexes = tf.ones(labels.shape[0], dtype=tf.float32) * i
+        results.append(tf.concat([
+            tf.reshape(indexes, (-1, 1)),
+            tf.cast(tf.reshape(labels, (-1, 1)), tf.float32),
             tf.reshape(probs, (-1, 1)),
             boxes + 1.0  # matlab's indexes start from 1
         ], axis=1))
-    results = np.array(results)
+    results = tf.concat(results, axis=0)
     for class_index, class_name in enumerate(class_names):
         if class_index == 0:
             continue  # ignore background
         prediction_path = eval_path / f"det_test_{class_name}.txt"
         with open(prediction_path, "w") as f:
-            sub = results[results[:, 1] == class_index, :]
+            results_mask = tf.where(results[:, 1] == class_index)
+            sub = tf.squeeze(tf.gather(results, results_mask, axis=0), axis=1)
             for i in range(sub.shape[0]):
                 prob_box = sub[i, 2:].numpy()
                 image_id = dataset.ids[int(sub[i, 0])]
@@ -197,7 +197,7 @@ if __name__ == '__main__':
     aps = []
     print("\n\nAverage Precision Per-class:")
     for class_index, class_name in enumerate(class_names):
-        if class_index == 0:
+        if class_index == 0 or class_index not in true_case_stat:
             continue
         prediction_path = eval_path / f"det_test_{class_name}.txt"
         ap = compute_average_precision_per_class(

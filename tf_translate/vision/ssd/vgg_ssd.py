@@ -1,68 +1,71 @@
-import torch
-from torch.nn import Conv2d, Sequential, ModuleList, ReLU, BatchNorm2d
-from ..nn.vgg import vgg
+from tensorflow.python.keras.applications.vgg16 import VGG16
+from tensorflow.python.keras.layers import Conv2D, ReLU, BatchNormalizationV2
 
-from .ssd import SSD
-from .predictor import Predictor
 from .config import vgg_ssd_config as config
+from .predictor import Predictor
+from .ssd import SSD
 
 
-def create_vgg_ssd(num_classes, is_test=False):
-    vgg_config = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M',
-                  512, 512, 512]
-    base_net = ModuleList(vgg(vgg_config))
+# from ..nn.vgg import vgg
+
+
+def create_vgg_ssd(num_classes, is_test=False, is_train=False):
+    base_net = VGG16(input_shape=(config.image_size, config.image_size, 3),
+                     include_top=False)
 
     source_layer_indexes = [
-        (23, BatchNorm2d(512)),
+        (23, BatchNormalizationV2()),
         len(base_net),
     ]
-    extras = ModuleList([
-        Sequential(
-            Conv2d(in_channels=1024, out_channels=256, kernel_size=1),
+    extras = [
+        [
+            Conv2D(filters=256, kernel_size=1),
             ReLU(),
-            Conv2d(in_channels=256, out_channels=512, kernel_size=3, stride=2, padding=1),
+            Conv2D(filters=512, kernel_size=3, strides=2, padding="same"),
             ReLU()
-        ),
-        Sequential(
-            Conv2d(in_channels=512, out_channels=128, kernel_size=1),
+        ],
+        [
+            Conv2D(filters=128, kernel_size=1),
             ReLU(),
-            Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1),
+            Conv2D(filters=256, kernel_size=3, strides=2, padding="same"),
             ReLU()
-        ),
-        Sequential(
-            Conv2d(in_channels=256, out_channels=128, kernel_size=1),
+        ],
+        [
+            Conv2D(filters=128, kernel_size=1),
             ReLU(),
-            Conv2d(in_channels=128, out_channels=256, kernel_size=3),
+            Conv2D(filters=256, kernel_size=3),
             ReLU()
-        ),
-        Sequential(
-            Conv2d(in_channels=256, out_channels=128, kernel_size=1),
+        ],
+        [
+            Conv2D(filters=128, kernel_size=1),
             ReLU(),
-            Conv2d(in_channels=128, out_channels=256, kernel_size=3),
+            Conv2D(filters=256, kernel_size=3),
             ReLU()
-        )
-    ])
+        ]
+    ]
 
-    regression_headers = ModuleList([
-        Conv2d(in_channels=512, out_channels=4 * 4, kernel_size=3, padding=1),
-        Conv2d(in_channels=1024, out_channels=6 * 4, kernel_size=3, padding=1),
-        Conv2d(in_channels=512, out_channels=6 * 4, kernel_size=3, padding=1),
-        Conv2d(in_channels=256, out_channels=6 * 4, kernel_size=3, padding=1),
-        Conv2d(in_channels=256, out_channels=4 * 4, kernel_size=3, padding=1),
-        Conv2d(in_channels=256, out_channels=4 * 4, kernel_size=3, padding=1), # TODO: change to kernel_size=1, padding=0?
-    ])
+    regression_headers = [
+        Conv2D(filters=4 * 4, kernel_size=3, padding="same"),
+        Conv2D(filters=6 * 4, kernel_size=3, padding="same"),
+        Conv2D(filters=6 * 4, kernel_size=3, padding="same"),
+        Conv2D(filters=6 * 4, kernel_size=3, padding="same"),
+        Conv2D(filters=4 * 4, kernel_size=3, padding="same"),
+        Conv2D(filters=4 * 4, kernel_size=3, padding="same"),
+        # TODO: change to kernel_size=1, padding=0?
+    ]
 
-    classification_headers = ModuleList([
-        Conv2d(in_channels=512, out_channels=4 * num_classes, kernel_size=3, padding=1),
-        Conv2d(in_channels=1024, out_channels=6 * num_classes, kernel_size=3, padding=1),
-        Conv2d(in_channels=512, out_channels=6 * num_classes, kernel_size=3, padding=1),
-        Conv2d(in_channels=256, out_channels=6 * num_classes, kernel_size=3, padding=1),
-        Conv2d(in_channels=256, out_channels=4 * num_classes, kernel_size=3, padding=1),
-        Conv2d(in_channels=256, out_channels=4 * num_classes, kernel_size=3, padding=1), # TODO: change to kernel_size=1, padding=0?
-    ])
+    classification_headers = [
+        Conv2D(filters=4 * num_classes, kernel_size=3, padding="same"),
+        Conv2D(filters=6 * num_classes, kernel_size=3, padding="same"),
+        Conv2D(filters=6 * num_classes, kernel_size=3, padding="same"),
+        Conv2D(filters=6 * num_classes, kernel_size=3, padding="same"),
+        Conv2D(filters=4 * num_classes, kernel_size=3, padding="same"),
+        Conv2D(filters=4 * num_classes, kernel_size=3, padding="same"),
+        # TODO: change to kernel_size=1, padding=0?
+    ]
 
     return SSD(num_classes, base_net, source_layer_indexes,
-               extras, classification_headers, regression_headers, is_test=is_test, config=config)
+               extras, classification_headers, regression_headers, is_test=is_test, config=config, is_train=is_train)
 
 
 def create_vgg_ssd_predictor(net, candidate_size=200, nms_method=None, sigma=0.5, device=None):

@@ -53,56 +53,7 @@ class PlotLosses(tf.keras.callbacks.Callback):
         plt.plot(self.x, self.losses, label="loss")
         plt.plot(self.x, self.val_losses, label="val_loss")
         plt.legend()
-        plt.show()
-
-
-class SaveModel(tf.keras.callbacks.ModelCheckpoint):
-    def __init__(self, filepath, **kwargs):
-        super().__init__(filepath, **kwargs)
-
-    def _save_model(self, epoch, logs):
-        """Saves the model.
-
-        Arguments:
-            epoch: the epoch this iteration is in.
-            logs: the `logs` dict passed in to `on_batch_end` or `on_epoch_end`.
-        """
-        logs = logs or {}
-
-        if isinstance(self.save_freq,
-                      int) or self.epochs_since_last_save >= self.period:
-            self.epochs_since_last_save = 0
-            file_handle, filepath = self._get_file_handle_and_path(epoch, logs)
-
-            if self.save_best_only:
-                current = logs.get(self.monitor)
-                if current is None:
-                    logging.warning('Can save best model only with %s available, '
-                                    'skipping.', self.monitor)
-                else:
-                    if self.monitor_op(current, self.best):
-                        if self.verbose > 0:
-                            print('\nEpoch %05d: %s improved from %0.5f to %0.5f,'
-                                  ' saving model to %s' % (epoch + 1, self.monitor, self.best,
-                                                           current, filepath))
-                        self.best = current
-                        if self.save_weights_only:
-                            self.model.save_weights(filepath, overwrite=True)
-                        else:
-                            self.model.save(filepath, overwrite=True)
-                    else:
-                        if self.verbose > 0:
-                            print('\nEpoch %05d: %s did not improve from %0.5f' %
-                                  (epoch + 1, self.monitor, self.best))
-            else:
-                if self.verbose > 0:
-                    print('\nEpoch %05d: saving model to %s' % (epoch + 1, filepath))
-                if self.save_weights_only:
-                    self.model.save_weights(filepath, overwrite=True)
-                else:
-                    self.model.save(filepath, overwrite=True)
-
-            self._maybe_remove_file(file_handle, filepath)
+        plt.draw()
 
 
 def lr_schedule(epoch):
@@ -119,7 +70,6 @@ parser = argparse.ArgumentParser(
 
 parser.add_argument("--dataset_type", default="voc", type=str,
                     help='Specify dataset type. Currently support voc and open_images.')
-
 parser.add_argument('--datasets', nargs='+', help='Dataset directory path', required=True)
 parser.add_argument('--validation_dataset', help='Dataset directory path', required=True)
 parser.add_argument('--balance_data', action='store_true',
@@ -166,7 +116,11 @@ parser.add_argument('--max_queue_size', default=10, type=int, help='Max number o
 parser.add_argument('--use_cuda', default=True, type=str2bool,
                     help='Use CUDA to train model')
 
-parser.add_argument('--checkpoint_folder', default='models/',
+parser.add_argument('--save_format', choices=['h5', 'tf'],
+                    help="What save format to use in model checkpoint callback. "
+                         "h5 to save whole model to .h5 file and tf to save to Tensorflow SavedModel format",
+                    default='h5')
+parser.add_argument('--checkpoint_folder', default='models\\',
                     help='Directory for saving checkpoint models')
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
@@ -174,6 +128,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO,
 args = parser.parse_args()
 
 if __name__ == '__main__':
+    print(sys.flags.interactive)
     timer = Timer()
     logging.info(args)
 
@@ -211,6 +166,8 @@ if __name__ == '__main__':
     """
     Prepare the training datasets
     """
+    if not os.path.isdir(args.checkpoint_folder):
+        os.makedirs(args.checkpoint_folder)
     logging.info("Prepare training datasets.")
     datasets = []
     for dataset_path in args.datasets:
@@ -309,14 +266,19 @@ if __name__ == '__main__':
     criterion = MultiboxLoss(config.priors, iou_threshold=0.5, neg_pos_ratio=3,
                              center_variance=0.1, size_variance=0.2)
     optimizer = tf.keras.optimizers.SGD(lr=args.lr, momentum=args.momentum, decay=args.weight_decay)
+
+    model_filename = str(args.net) + "-Epoch-{epoch:02d}-Loss-{val_loss:.2f}"
+    if args.save_format == 'h5':
+        model_filename += '.h5'
+    # checkpoint_path = os.path.join(args.checkpoint_folder, model_filename)
+    checkpoint_path = args.checkpoint_folder + model_filename
     model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
-        filepath="models/" + str(args.net) + "-Epoch-{epoch:02d}-Loss-{val_loss:.2f}.h5",
+        filepath=checkpoint_path,
         monitor='val_loss',
         verbose=1,
         save_best_only=True,
         save_weights_only=False,
-        mode='auto',
-        period=1)
+        mode='auto')
     early_stopper = tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5,
                                                      verbose=0,
                                                      mode='auto', baseline=None,
