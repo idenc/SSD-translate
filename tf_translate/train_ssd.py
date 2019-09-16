@@ -52,8 +52,10 @@ class PlotLosses(tf.keras.callbacks.Callback):
 
         plt.plot(self.x, self.losses, label="loss")
         plt.plot(self.x, self.val_losses, label="val_loss")
+        plt.ion()
         plt.legend()
-        plt.draw()
+        plt.show()
+        plt.pause(0.001)
 
 
 def lr_schedule(epoch):

@@ -48,7 +48,6 @@ if args.model_path != '':
 else:
     net.ssd.load_weights(args.weights_path, by_name=True)
 
-# net.base_net.reset_states()
 if net_type == 'vgg16-ssd':
     predictor = create_vgg_ssd_predictor(net, candidate_size=200)
 elif net_type == 'mb1-ssd':
@@ -62,7 +61,7 @@ elif net_type == 'sq-ssd-lite':
 else:
     predictor = create_vgg_ssd_predictor(net, candidate_size=200)
 
-net.ssd.save('models\\keras_ssd')
+net.ssd.save('keras-vgg.h5')
 orig_image = cv2.imread(image_path)
 image = cv2.cvtColor(orig_image, cv2.COLOR_BGR2RGB)
 boxes, labels, probs = predictor.predict(image, 10, 0.4)

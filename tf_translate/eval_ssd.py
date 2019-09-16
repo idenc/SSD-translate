@@ -12,7 +12,7 @@ from vision.datasets.voc_dataset import VOCDataset
 from vision.ssd.mobilenetv1_ssd import create_mobilenetv1_ssd, create_mobilenetv1_ssd_predictor
 # from vision.ssd.mobilenetv1_ssd_lite import create_mobilenetv1_ssd_lite, create_mobilenetv1_ssd_lite_predictor
 # from vision.ssd.squeezenet_ssd_lite import create_squeezenet_ssd_lite, create_squeezenet_ssd_lite_predictor
-# from vision.ssd.vgg_ssd import create_vgg_ssd, create_vgg_ssd_predictor
+from vision.ssd.vgg_ssd import create_vgg_ssd, create_vgg_ssd_predictor
 from vision.utils import box_utils, measurements
 from vision.utils.misc import str2bool, Timer
 
@@ -185,7 +185,7 @@ if __name__ == '__main__':
             continue  # ignore background
         prediction_path = eval_path / f"det_test_{class_name}.txt"
         with open(prediction_path, "w") as f:
-            results_mask = tf.where(results[:, 1] == class_index)
+            results_mask = tf.where(tf.equal(results[:, 1], class_index))
             sub = tf.squeeze(tf.gather(results, results_mask, axis=0), axis=1)
             for i in range(sub.shape[0]):
                 prob_box = sub[i, 2:].numpy()

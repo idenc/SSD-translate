@@ -1,5 +1,6 @@
-from tensorflow.python.keras.applications.vgg16 import VGG16
-from tensorflow.python.keras.layers import Conv2D, ReLU, BatchNormalizationV2
+from vision.nn.vgg import VGG16
+from tensorflow.python.keras.layers import Conv2D, BatchNormalizationV2, MaxPool2D, Input, ZeroPadding2D
+from tensorflow.python.keras.models import Model
 
 from .config import vgg_ssd_config as config
 from .predictor import Predictor
@@ -10,37 +11,36 @@ from .ssd import SSD
 
 
 def create_vgg_ssd(num_classes, is_test=False, is_train=False):
-    base_net = VGG16(input_shape=(config.image_size, config.image_size, 3),
+    base_net = VGG16(input_shape=(config.image_size, config.image_size, 3), input_tensor=Input(shape=(300, 300, 3), batch_size=1),
                      include_top=False)
+    # Add extra SSD layers
+    vgg_output = base_net.output
+    x = MaxPool2D(pool_size=3, strides=1, padding="same")(vgg_output)
+    x = Conv2D(filters=1024, kernel_size=3, padding="same", dilation_rate=(6, 6), activation='relu')(x)
+    output = Conv2D(filters=1024, kernel_size=1, padding="same", activation='relu')(x)
+    base_net = Model(inputs=base_net.inputs, outputs=output)
 
     source_layer_indexes = [
-        (23, BatchNormalizationV2()),
-        len(base_net),
+        (14, BatchNormalizationV2(epsilon=0.000009999999747378752)),
+        len(base_net.layers),
     ]
     extras = [
         [
-            Conv2D(filters=256, kernel_size=1),
-            ReLU(),
-            Conv2D(filters=512, kernel_size=3, strides=2, padding="same"),
-            ReLU()
+            Conv2D(filters=256, kernel_size=1, padding='same', activation='relu'),
+            Conv2D(filters=512, kernel_size=3, strides=2, padding="same", activation='relu'),
         ],
         [
-            Conv2D(filters=128, kernel_size=1),
-            ReLU(),
-            Conv2D(filters=256, kernel_size=3, strides=2, padding="same"),
-            ReLU()
+            Conv2D(filters=128, kernel_size=1, padding="same", activation='relu'),
+            ZeroPadding2D(padding=1),
+            Conv2D(filters=256, kernel_size=3, strides=2, activation='relu'),
         ],
         [
-            Conv2D(filters=128, kernel_size=1),
-            ReLU(),
-            Conv2D(filters=256, kernel_size=3),
-            ReLU()
+            Conv2D(filters=128, kernel_size=1, padding='same', activation='relu'),
+            Conv2D(filters=256, kernel_size=3, activation='relu'),
         ],
         [
-            Conv2D(filters=128, kernel_size=1),
-            ReLU(),
-            Conv2D(filters=256, kernel_size=3),
-            ReLU()
+            Conv2D(filters=128, kernel_size=1, padding='same', activation='relu'),
+            Conv2D(filters=256, kernel_size=3, activation='relu'),
         ]
     ]
 
@@ -68,11 +68,10 @@ def create_vgg_ssd(num_classes, is_test=False, is_train=False):
                extras, classification_headers, regression_headers, is_test=is_test, config=config, is_train=is_train)
 
 
-def create_vgg_ssd_predictor(net, candidate_size=200, nms_method=None, sigma=0.5, device=None):
+def create_vgg_ssd_predictor(net, candidate_size=200, nms_method=None, sigma=0.5):
     predictor = Predictor(net, config.image_size, config.image_mean,
                           nms_method=nms_method,
                           iou_threshold=config.iou_threshold,
                           candidate_size=candidate_size,
-                          sigma=sigma,
-                          device=device)
+                          sigma=sigma)
     return predictor
