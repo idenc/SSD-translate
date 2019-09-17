@@ -1,5 +1,6 @@
-from ..utils import box_utils
 import tensorflow as tf
+
+from ..utils import box_utils
 
 
 class MultiboxLoss(tf.keras.Model):
@@ -18,29 +19,30 @@ class MultiboxLoss(tf.keras.Model):
         self.priors = priors
 
     def forward(self, y_true, y_pred):
-        """Compute classification loss and smooth l1 loss.
+        """
+        Compute classification loss and smooth l1 loss.
         Args:
-            :param y_true: Tuple containing:
+            :param y_true: Tensor containing:
                 labels (batch_size, num_priors): real labels of all the priors.
                 boxes (batch_size, num_priors, 4): real boxes corresponding all the priors.
-            :param y_pred: Tuple containing:
+            :param y_pred: Tensor containing:
                 confidence (batch_size, num_priors, num_classes): class predictions.
                 locations (batch_size, num_priors, 4): predicted locations.
         """
         confidence = y_pred[:, :, :21]
         predicted_locations = y_pred[:, :, 21:]
         gt_locations = y_true[:, :, :4]
-        labels = y_true[:, :, 4]
+        labels = tf.cast(y_true[:, :, 4], dtype=tf.int64)
         num_classes = confidence.shape[2]
         # derived from cross_entropy=sum(log(p))
-
         loss = tf.stop_gradient(-tf.nn.log_softmax(confidence, axis=2)[:, :, 0])
         mask = tf.stop_gradient(box_utils.hard_negative_mining(loss, labels, self.neg_pos_ratio))
 
         confidence = tf.boolean_mask(confidence, mask)
         logits = tf.reshape(confidence, [-1, num_classes])
-        ce_labels = tf.cast(tf.boolean_mask(labels, mask), tf.int64)
-        classification_loss = tf.reduce_sum(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=ce_labels, logits=logits))
+        ce_labels = tf.boolean_mask(labels, mask)
+        classification_loss = tf.reduce_sum(
+            tf.nn.sparse_softmax_cross_entropy_with_logits(labels=ce_labels, logits=logits))
         pos_mask = tf.math.greater(labels, 0)
         predicted_locations = tf.reshape(tf.boolean_mask(predicted_locations, pos_mask), [-1, 4])
         gt_locations = tf.reshape(tf.boolean_mask(gt_locations, pos_mask), [-1, 4])

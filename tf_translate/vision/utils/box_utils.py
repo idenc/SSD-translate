@@ -153,6 +153,7 @@ def iou_of(boxes0, boxes1, eps=1e-5):
     area1 = area_of(boxes1[..., :2], boxes1[..., 2:])
     return overlap_area / (area0 + area1 - overlap_area + eps)
 
+
 def my_argmax(a):
     """
     Modified argmax that breaks ties using index of last value
@@ -164,6 +165,7 @@ def my_argmax(a):
     my_argmax = a.argmax(axis=1)
     my_argmax[rows_multiple_max] = a.shape[1] - 1
     return my_argmax
+
 
 def assign_priors(gt_boxes, gt_labels, corner_form_priors,
                   iou_threshold):
@@ -180,10 +182,10 @@ def assign_priors(gt_boxes, gt_labels, corner_form_priors,
     # size: num_priors x num_targets
     ious = iou_of(np.expand_dims(gt_boxes, 0), np.expand_dims(corner_form_priors, 1))
     # size: num_priors
-    best_target_per_prior_index = tf.Variable(my_argmax(ious.numpy()))
+    best_target_per_prior_index = tf.Variable(tf.subtract(ious.shape[1] - 1, tf.argmax(tf.reverse(ious, axis=[1]), 1)))
     best_target_per_prior = tf.Variable(tf.math.reduce_max(ious, 1))
     # size: num_targets
-    best_prior_per_target_index = tf.argmax(ious, 0)
+    best_prior_per_target_index = tf.subtract(ious.shape[0] - 1, tf.argmax(tf.reverse(ious, axis=[0]), 0))
 
     for target_index, prior_index in enumerate(best_prior_per_target_index):
         best_target_per_prior_index[prior_index].assign(target_index)
@@ -192,12 +194,10 @@ def assign_priors(gt_boxes, gt_labels, corner_form_priors,
         best_target_per_prior[indx].assign(2)
     # size: num_priors
     labels = tf.gather(gt_labels, best_target_per_prior_index)
-    mask = tf.greater(best_target_per_prior, iou_threshold)
+    mask = tf.greater_equal(best_target_per_prior, iou_threshold)
 
     labels = tf.multiply(labels, tf.cast(mask, labels.dtype))
-    # labels[best_target_per_prior < iou_threshold] = 0  # the background id
     boxes = tf.gather(gt_boxes, best_target_per_prior_index)
-    # boxes = gt_boxes[best_target_per_prior_index]
     return boxes, labels
 
 

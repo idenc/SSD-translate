@@ -42,10 +42,10 @@ else:
     print("The net type is wrong. It should be one of vgg16-ssd, mb1-ssd and mb1-ssd-lite.")
     sys.exit(1)
 
-# if args.model_path != '':
-#     net.load(args.model_path)
-# else:
-#     net.ssd.load_weights(args.weights_path, by_name=True)
+if args.model_path != '':
+    net.load(args.model_path)
+else:
+    net.ssd.load_weights(args.weights_path, by_name=True)
 
 if net_type == 'vgg16-ssd':
     predictor = create_vgg_ssd_predictor(net, candidate_size=200)
