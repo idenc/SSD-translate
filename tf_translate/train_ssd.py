@@ -130,7 +130,6 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO,
 args = parser.parse_args()
 
 if __name__ == '__main__':
-    print(sys.flags.interactive)
     timer = Timer()
     logging.info(args)
 
@@ -256,7 +255,7 @@ if __name__ == '__main__':
         net.load(args.resume)
     elif args.base_net:
         logging.info(f"Init from base net {args.base_net}")
-        net.init_from_base_net(args.base_net)
+        net.base_net.load_weights(args.base_net, by_name=True)
     elif args.pretrained_ssd:
         logging.info(f"Init from pretrained ssd {args.pretrained_ssd}")
         net.ssd.load_weights(args.pretrained_ssd, by_name=True)

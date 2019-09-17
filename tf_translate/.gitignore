@@ -6,6 +6,8 @@ eval_results/
 
 # Pytorch Models
 *.pth
+# Keras Models
+*.h5
 
 # images
 *.jpg

@@ -22,6 +22,9 @@ def compute_average_precision(precision, recall):
 
 
 def compute_voc2007_average_precision(precision, recall):
+    """
+    11-point interpolation
+    """
     ap = 0.
     for t in np.arange(0., 1.1, 0.1):
         if np.sum(recall >= t) == 0:

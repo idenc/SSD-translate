@@ -48,7 +48,8 @@ class SSD:
         for end_layer_index in self.source_layer_indexes:
             if isinstance(end_layer_index, GraphPath):
                 path = end_layer_index
-                end_layer_index = end_layer_index.s0
+                end_layer_index, end_layer_index_slice = \
+                    end_layer_index.s0[0], end_layer_index.s0[1]
                 added_layer = None
             elif isinstance(end_layer_index, tuple):
                 added_layer = end_layer_index[1]
@@ -64,7 +65,7 @@ class SSD:
             else:
                 y = x
             if path:
-                sub = getattr(self.base_net[end_layer_index], path.name)
+                sub = self.base_net.layers[end_layer_index:end_layer_index_slice]
                 for layer in sub[:path.s1]:
                     x = layer(x)
                 y = x
