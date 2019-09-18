@@ -1,4 +1,4 @@
-from tensorflow.python.keras.layers import Conv2D, ReLU, ZeroPadding2D
+from tensorflow.python.keras.layers import Conv2D, ZeroPadding2D
 
 from vision.nn.mobilenet import MobileNet
 from .config import mobilenetv1_ssd_config as config
@@ -8,7 +8,7 @@ from .ssd import SSD
 
 def create_mobilenetv1_ssd(num_classes, is_test=False, is_train=False):
     base_net = MobileNet(input_shape=(config.image_size, config.image_size, 3),
-                         include_top=False)  # disable dropout layer
+                         include_top=False, weights=None)  # disable dropout layer
 
     source_layer_indexes = [
         73,

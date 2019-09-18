@@ -10,22 +10,22 @@ from .ssd import SSD, GraphPath
 
 def create_mobilenetv2_ssd_lite(num_classes, width_mult=1.0, is_test=False):
     base_net = MobileNetV2(input_shape=(config.image_size, config.image_size, 3),
-                           include_top=False, alpha=width_mult)
+                           include_top=False, alpha=width_mult, weights=None)
 
     source_layer_indexes = [
-        GraphPath((108, 116), 'conv', 3),
-        19,
+        GraphPath((117, 126), 'conv', 3),
+        len(base_net.layers),
     ]
     extras = [
         # Make frozen inverted residual block functions that only need input
         partial(inverted_res_block, expansion=0.2, stride=2, alpha=width_mult,
-                filters=512, block_id=None),
+                filters=512, block_id=17),
         partial(inverted_res_block, expansion=0.25, stride=2, alpha=width_mult,
-                filters=256, block_id=None),
+                filters=256, block_id=18),
         partial(inverted_res_block, expansion=0.5, stride=2, alpha=width_mult,
-                filters=256, block_id=None),
+                filters=256, block_id=19),
         partial(inverted_res_block, expansion=0.25, stride=2, alpha=width_mult,
-                filters=64, block_id=None)
+                filters=64, block_id=20)
     ]
 
     regression_headers = [

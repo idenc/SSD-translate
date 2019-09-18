@@ -440,7 +440,7 @@ def inverted_res_block(inputs, expansion, stride, alpha, filters, block_id):
 
     if block_id:
         # Expand
-        x = layers.Conv2D(expansion * in_channels,
+        x = layers.Conv2D(round(expansion * in_channels),
                           kernel_size=1,
                           padding='same',
                           use_bias=False,

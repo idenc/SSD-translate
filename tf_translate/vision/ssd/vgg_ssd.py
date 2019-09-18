@@ -12,7 +12,7 @@ from .ssd import SSD
 
 def create_vgg_ssd(num_classes, is_test=False, is_train=False):
     base_net = VGG16(input_shape=(config.image_size, config.image_size, 3), input_tensor=Input(shape=(300, 300, 3), batch_size=1),
-                     include_top=False)
+                     include_top=False, weights=None)
     # Add extra SSD layers
     vgg_output = base_net.output
     x = MaxPool2D(pool_size=3, strides=1, padding="same")(vgg_output)

@@ -21,7 +21,7 @@ from vision.ssd.config import mobilenetv1_ssd_config
 from vision.ssd.config import squeezenet_ssd_config
 from vision.ssd.config import vgg_ssd_config
 from vision.ssd.data_preprocessing import TrainAugmentation, TestTransform
-# from vision.ssd.vgg_ssd import create_vgg_ssd
+from vision.ssd.vgg_ssd import create_vgg_ssd
 from vision.ssd.mobilenetv1_ssd import create_mobilenetv1_ssd
 from vision.ssd.ssd import MatchPrior
 from vision.utils.misc import str2bool, Timer, freeze_net_layers, store_labels
@@ -122,7 +122,7 @@ parser.add_argument('--save_format', choices=['h5', 'tf'],
                     help="What save format to use in model checkpoint callback. "
                          "h5 to save whole model to .h5 file and tf to save to Tensorflow SavedModel format",
                     default='h5')
-parser.add_argument('--checkpoint_folder', default='models\\',
+parser.add_argument('--checkpoint_folder', default='models/',
                     help='Directory for saving checkpoint models')
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
@@ -247,12 +247,21 @@ if __name__ == '__main__':
         logging.info("Freeze all the layers except prediction heads.")
 
     """
+    Set up loss, optimizer, and callbacks
+    """
+    criterion = MultiboxLoss(config.priors, iou_threshold=0.5, neg_pos_ratio=3,
+                             center_variance=0.1, size_variance=0.2)
+    optimizer = tf.keras.optimizers.SGD(lr=args.lr, momentum=args.momentum, decay=args.weight_decay)
+
+    """
     Load any specified weights before training
     """
     timer.start("Load Model")
     if args.resume:
         logging.info(f"Resume from the model {args.resume}")
-        net.load(args.resume)
+        net.ssd = tf.keras.models.load_model(args.resume, custom_objects={'forward': criterion.forward})
+        epoch_idx = args.resume.find('Epoch')
+        last_epoch = int(args.resume[epoch_idx + 6:epoch_idx + 8])
     elif args.base_net:
         logging.info(f"Init from base net {args.base_net}")
         net.base_net.load_weights(args.base_net, by_name=True)
@@ -262,12 +271,8 @@ if __name__ == '__main__':
     logging.info(f'Took {timer.end("Load Model"):.2f} seconds to load the model.')
 
     """
-    Set up loss, optimizer, and callbacks
+    Set up callbacks
     """
-    criterion = MultiboxLoss(config.priors, iou_threshold=0.5, neg_pos_ratio=3,
-                             center_variance=0.1, size_variance=0.2)
-    optimizer = tf.keras.optimizers.SGD(lr=args.lr, momentum=args.momentum, decay=args.weight_decay)
-
     model_filename = str(args.net) + "-Epoch-{epoch:02d}-Loss-{val_loss:.2f}"
     if args.save_format == 'h5':
         model_filename += '.h5'
@@ -292,6 +297,7 @@ if __name__ == '__main__':
     logging.info(f"Learning rate: {args.lr}, Base net learning rate: {base_net_lr}, "
                  + f"Extra Layers learning rate: {extra_layers_lr}.")
 
+    # To test loss function
     # input, y_true = datasets[0]
     # with tf.device('/CPU:0'):
     #     y_pred = net.ssd(input)

@@ -2,6 +2,7 @@ import sys
 from argparse import ArgumentParser
 
 import cv2
+from tensorflow.python.keras.models import load_model
 
 # from vision.ssd.mobilenetv1_ssd_lite import create_mobilenetv1_ssd_lite, create_mobilenetv1_ssd_lite_predictor
 # from vision.ssd.squeezenet_ssd_lite import create_squeezenet_ssd_lite, create_squeezenet_ssd_lite_predictor
@@ -31,7 +32,7 @@ class_names = [name.strip() for name in open(label_path).readlines()]
 if net_type == 'vgg16-ssd':
     net = create_vgg_ssd(len(class_names), is_test=True)
 elif net_type == 'mb1-ssd':
-    net = create_mobilenetv1_ssd(len(class_names), is_test=True)
+    net = create_mobilenetv1_ssd(len(class_names), is_test=False)
 elif net_type == 'mb1-ssd-lite':
     net = create_mobilenetv1_ssd_lite(len(class_names), is_test=True)
 elif net_type == 'mb2-ssd-lite':
@@ -43,7 +44,7 @@ else:
     sys.exit(1)
 
 if args.model_path != '':
-    net.load(args.model_path)
+    net.ssd = load_model(args.model_path)
 else:
     net.ssd.load_weights(args.weights_path, by_name=True)
 
