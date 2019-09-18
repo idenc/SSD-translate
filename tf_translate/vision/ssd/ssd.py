@@ -40,10 +40,18 @@ class SSD:
         else:
             self.ssd = tf.keras.models.Model(inputs=self.base_net.input, outputs=[confidences, locations])
 
+    def get_start_layer(self):
+        if isinstance(self.source_layer_indexes[0], GraphPath):
+            return self.source_layer_indexes[0].s0[0]
+        elif isinstance(self.source_layer_indexes[0], tuple):
+            return self.source_layer_indexes[0][0]
+        else:
+            return self.source_layer_indexes[0]
+
     def call(self, x):
         confidences = []
         locations = []
-        start_layer_index = 1
+        start_layer_index = self.get_start_layer()
         header_index = 0
         for end_layer_index in self.source_layer_indexes:
             if isinstance(end_layer_index, GraphPath):
@@ -58,8 +66,12 @@ class SSD:
             else:
                 added_layer = None
                 path = None
+            x = self.base_net.layers[start_layer_index - 1].output
             for layer in self.base_net.layers[start_layer_index: end_layer_index]:
-                x = layer(x)
+                if type(layer) == tf.keras.layers.Add:
+                    x = layer(layer.input)
+                else:
+                    x = layer(x)
             if added_layer:
                 y = added_layer(x)
             else:
@@ -79,11 +91,17 @@ class SSD:
             locations.append(location)
 
         for layer in self.base_net.layers[end_layer_index:]:
+            if type(layer) == tf.keras.layers.Add:
+                # x2 = self.base_net.layers[-9]
+                print()
             x = layer(x)
 
         for sequence in self.extras:
-            for layer in sequence:
-                x = layer(x)
+            if type(sequence) == list:
+                for layer in sequence:
+                    x = layer(x)
+            else:
+                x = sequence(x)
             confidence, location = self.compute_header(header_index, x)
             header_index += 1
             confidences.append(confidence)
