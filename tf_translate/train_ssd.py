@@ -3,11 +3,13 @@ import itertools
 import logging
 import os
 import sys
+import math
 import warnings
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 import tensorflow as tf
+from sgdr import SGDRScheduler
 
 from vision.datasets.open_images import OpenImagesDataset
 # from vision.ssd.mobilenetv1_ssd_lite import create_mobilenetv1_ssd_lite
@@ -291,7 +293,8 @@ if __name__ == '__main__':
                                                      restore_best_weights=True)
     tensorboard = tf.keras.callbacks.TensorBoard()  # Not used, add to callbacks list to use
     plot = PlotLosses()
-    lr_scheduler = tf.keras.callbacks.LearningRateScheduler(lr_schedule, verbose=1)
+    # lr_scheduler = tf.keras.callbacks.LearningRateScheduler(lr_schedule, verbose=1)
+    lr_scheduler = SGDRScheduler(min_lr=1e-5, max_lr=1e-2, steps_per_epoch=math.ceil(args.num_epochs / args.batch_size))
     callbacks = [model_checkpoint, early_stopper, plot, lr_scheduler]
 
     logging.info(f"Learning rate: {args.lr}, Base net learning rate: {base_net_lr}, "
