@@ -323,8 +323,8 @@ def myMobileNetV2(input_shape=None,
                       use_bias=False,
                       name='Conv1')(x)
     x = layers.BatchNormalization(axis=channel_axis,
-                                  epsilon=0.000009999999747378752,
-                                  momentum=0.8999999761581421,
+                                  epsilon=1e-5,
+                                  momentum=0.999,
                                   name='bn_Conv1')(x)
     x = layers.ReLU(6., name='Conv1_relu')(x)
 
@@ -383,8 +383,8 @@ def myMobileNetV2(input_shape=None,
                       name='Conv_1',
                       padding='valid')(x)
     x = layers.BatchNormalization(axis=channel_axis,
-                                  epsilon=0.000009999999747378752,
-                                  momentum=0.8999999761581421,
+                                  epsilon=1e-5,
+                                  momentum=0.999,
                                   name='Conv_1_bn')(x)
     x = layers.ReLU(6., name='out_relu')(x)
 
@@ -448,8 +448,8 @@ def inverted_res_block(inputs, expansion, stride, alpha, filters, block_id):
                           activation=None,
                           name=prefix + 'expand')(x)
         x = layers.BatchNormalization(axis=channel_axis,
-                                      epsilon=0.000009999999747378752,
-                                      momentum=0.8999999761581421,
+                                      epsilon=1e-5,
+                                      momentum=0.999,
                                       name=prefix + 'expand_BN')(x)
         x = layers.ReLU(6., name=prefix + 'expand_relu')(x)
     else:
@@ -465,7 +465,7 @@ def inverted_res_block(inputs, expansion, stride, alpha, filters, block_id):
                                padding='valid',
                                name=prefix + 'depthwise')(x)
     x = layers.BatchNormalization(axis=channel_axis,
-                                  epsilon=0.000009999999747378752,
+                                  epsilon=1e-5,
                                   momentum=0.999,
                                   name=prefix + 'depthwise_BN')(x)
 
@@ -479,8 +479,8 @@ def inverted_res_block(inputs, expansion, stride, alpha, filters, block_id):
                       activation=None,
                       name=prefix + 'project')(x)
     x = layers.BatchNormalization(axis=channel_axis,
-                                  epsilon=0.000009999999747378752,
-                                  momentum=0.8999999761581421,
+                                  epsilon=1e-5,
+                                  momentum=0.999,
                                   name=prefix + 'project_BN')(x)
 
     if in_channels == pointwise_filters and stride == 1:

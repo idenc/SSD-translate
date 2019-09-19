@@ -1,17 +1,14 @@
-from vision.nn.vgg import VGG16
-from tensorflow.python.keras.layers import Conv2D, BatchNormalizationV2, MaxPool2D, Input, ZeroPadding2D
+from tensorflow.python.keras.layers import Conv2D, BatchNormalizationV2, MaxPool2D, ZeroPadding2D
 from tensorflow.python.keras.models import Model
 
+from vision.nn.vgg import VGG16
 from .config import vgg_ssd_config as config
 from .predictor import Predictor
 from .ssd import SSD
 
 
-# from ..nn.vgg import vgg
-
-
 def create_vgg_ssd(num_classes, is_test=False, is_train=False):
-    base_net = VGG16(input_shape=(config.image_size, config.image_size, 3), input_tensor=Input(shape=(300, 300, 3), batch_size=1),
+    base_net = VGG16(input_shape=(config.image_size, config.image_size, 3),
                      include_top=False, weights=None)
     # Add extra SSD layers
     vgg_output = base_net.output
@@ -21,7 +18,7 @@ def create_vgg_ssd(num_classes, is_test=False, is_train=False):
     base_net = Model(inputs=base_net.inputs, outputs=output)
 
     source_layer_indexes = [
-        (14, BatchNormalizationV2(epsilon=0.000009999999747378752)),
+        (14, BatchNormalizationV2(epsilon=1e-5)),
         len(base_net.layers),
     ]
     extras = [

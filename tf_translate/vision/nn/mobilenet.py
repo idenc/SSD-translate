@@ -365,7 +365,7 @@ def _conv_block(inputs, filters, alpha, kernel=(3, 3), strides=(1, 1)):
                       use_bias=False,
                       strides=strides,
                       name='conv1')(x)
-    x = layers.BatchNormalization(axis=channel_axis, epsilon=0.000009999999747378752, name='conv1_bn')(x)
+    x = layers.BatchNormalization(axis=channel_axis, epsilon=1e-5, name='conv1_bn')(x)
     return layers.ReLU(name='conv1_relu')(x)
 
 
@@ -437,7 +437,7 @@ def _depthwise_conv_block(inputs, pointwise_conv_filters, alpha,
                                use_bias=False,
                                name='conv_dw_%d' % block_id)(x)
     x = layers.BatchNormalization(
-        axis=channel_axis, epsilon=0.000009999999747378752, name='conv_dw_%d_bn' % block_id)(x)
+        axis=channel_axis, epsilon=1e-5, name='conv_dw_%d_bn' % block_id)(x)
     x = layers.ReLU(name='conv_dw_%d_relu' % block_id)(x)
 
     x = layers.Conv2D(pointwise_conv_filters, (1, 1),
@@ -446,6 +446,6 @@ def _depthwise_conv_block(inputs, pointwise_conv_filters, alpha,
                       strides=(1, 1),
                       name='conv_pw_%d' % block_id)(x)
     x = layers.BatchNormalization(axis=channel_axis,
-                                  epsilon=0.000009999999747378752,
+                                  epsilon=1e-5,
                                   name='conv_pw_%d_bn' % block_id)(x)
     return layers.ReLU(name='conv_pw_%d_relu' % block_id)(x)

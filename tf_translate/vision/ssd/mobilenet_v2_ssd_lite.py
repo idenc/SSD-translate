@@ -31,20 +31,20 @@ def create_mobilenetv2_ssd_lite(num_classes, width_mult=1.0, is_test=False):
 
     regression_headers = [
         # TODO change to relu6
-        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3, padding='valid'),
-        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3, padding='valid'),
-        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3, padding='valid'),
-        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3, padding='valid'),
-        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3, padding='valid'),
+        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3),
+        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3),
+        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3),
+        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3),
+        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3),
         Conv2D(filters=6 * 4, kernel_size=1, padding='valid'),
     ]
 
     classification_headers = [
-        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, padding='valid'),
-        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, padding='valid'),
-        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, padding='valid'),
-        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, padding='valid'),
-        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, padding='valid'),
+        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3),
+        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3),
+        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3),
+        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3),
+        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3),
         Conv2D(filters=6 * num_classes, kernel_size=1, padding='valid'),
     ]
 
@@ -52,13 +52,12 @@ def create_mobilenetv2_ssd_lite(num_classes, width_mult=1.0, is_test=False):
                extras, classification_headers, regression_headers, is_test=is_test, config=config)
 
 
-def SeparableConv2D_with_batchnorm(filters, kernel_size, padding):
+def SeparableConv2D_with_batchnorm(filters, kernel_size):
     return Sequential([
-        ZeroPadding2D(padding=(1, 1)),
-        DepthwiseConv2D(kernel_size=kernel_size, padding=padding),
-        BatchNormalizationV2(epsilon=0.000009999999747378752, momentum=0.8999999761581421),
+        DepthwiseConv2D(kernel_size=kernel_size, padding='same'),
+        BatchNormalizationV2(epsilon=1e-5, momentum=0.999),
         ReLU(max_value=6.),
-        Conv2D(filters=filters, kernel_size=1, padding=padding)
+        Conv2D(filters=filters, kernel_size=1, padding='valid')
     ])
 
 
