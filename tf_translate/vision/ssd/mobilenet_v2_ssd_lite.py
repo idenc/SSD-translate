@@ -14,7 +14,7 @@ def create_mobilenetv2_ssd_lite(num_classes, width_mult=1.0, is_test=False):
                            include_top=False, alpha=width_mult, weights=None)
 
     source_layer_indexes = [
-        GraphPath((127, 136), 'conv', 3),
+        GraphPath((127, 136), 3),
         len(base_net.layers),
     ]
     extras = [

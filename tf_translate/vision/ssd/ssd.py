@@ -5,7 +5,7 @@ import tensorflow as tf
 
 from ..utils import box_utils
 
-GraphPath = namedtuple("GraphPath", ['s0', 'name', 's1'])  #
+GraphPath = namedtuple("GraphPath", ['s0', 's1'])  #
 
 
 class SSD:
