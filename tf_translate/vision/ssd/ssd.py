@@ -91,9 +91,6 @@ class SSD:
             locations.append(location)
 
         for layer in self.base_net.layers[end_layer_index:]:
-            if type(layer) == tf.keras.layers.Add:
-                # x2 = self.base_net.layers[-9]
-                print()
             x = layer(x)
 
         for sequence in self.extras:

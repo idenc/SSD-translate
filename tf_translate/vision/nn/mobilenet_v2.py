@@ -314,7 +314,7 @@ def myMobileNetV2(input_shape=None,
     channel_axis = 1 if backend.image_data_format() == 'channels_first' else -1
 
     first_block_filters = _make_divisible(32 * alpha, 8)
-    x = layers.ZeroPadding2D(padding=correct_pad(backend, img_input, 3),
+    x = layers.ZeroPadding2D(padding=(1, 1),
                              name='Conv1_pad')(img_input)
     x = layers.Conv2D(first_block_filters,
                       kernel_size=3,
@@ -323,8 +323,8 @@ def myMobileNetV2(input_shape=None,
                       use_bias=False,
                       name='Conv1')(x)
     x = layers.BatchNormalization(axis=channel_axis,
-                                  epsilon=1e-3,
-                                  momentum=0.999,
+                                  epsilon=0.000009999999747378752,
+                                  momentum=0.8999999761581421,
                                   name='bn_Conv1')(x)
     x = layers.ReLU(6., name='Conv1_relu')(x)
 
@@ -380,10 +380,11 @@ def myMobileNetV2(input_shape=None,
     x = layers.Conv2D(last_block_filters,
                       kernel_size=1,
                       use_bias=False,
-                      name='Conv_1')(x)
+                      name='Conv_1',
+                      padding='valid')(x)
     x = layers.BatchNormalization(axis=channel_axis,
-                                  epsilon=1e-3,
-                                  momentum=0.999,
+                                  epsilon=0.000009999999747378752,
+                                  momentum=0.8999999761581421,
                                   name='Conv_1_bn')(x)
     x = layers.ReLU(6., name='out_relu')(x)
 
@@ -442,30 +443,29 @@ def inverted_res_block(inputs, expansion, stride, alpha, filters, block_id):
         # Expand
         x = layers.Conv2D(round(expansion * in_channels),
                           kernel_size=1,
-                          padding='same',
+                          padding='valid',
                           use_bias=False,
                           activation=None,
                           name=prefix + 'expand')(x)
         x = layers.BatchNormalization(axis=channel_axis,
-                                      epsilon=1e-3,
-                                      momentum=0.999,
+                                      epsilon=0.000009999999747378752,
+                                      momentum=0.8999999761581421,
                                       name=prefix + 'expand_BN')(x)
         x = layers.ReLU(6., name=prefix + 'expand_relu')(x)
     else:
         prefix = 'expanded_conv_'
 
     # Depthwise
-    if stride == 2:
-        x = layers.ZeroPadding2D(padding=correct_pad(backend, x, 3),
-                                 name=prefix + 'pad')(x)
+    x = layers.ZeroPadding2D(padding=(1, 1),
+                             name=prefix + 'pad')(x)
     x = layers.DepthwiseConv2D(kernel_size=3,
                                strides=stride,
                                activation=None,
                                use_bias=False,
-                               padding='same' if stride == 1 else 'valid',
+                               padding='valid',
                                name=prefix + 'depthwise')(x)
     x = layers.BatchNormalization(axis=channel_axis,
-                                  epsilon=1e-3,
+                                  epsilon=0.000009999999747378752,
                                   momentum=0.999,
                                   name=prefix + 'depthwise_BN')(x)
 
@@ -474,13 +474,13 @@ def inverted_res_block(inputs, expansion, stride, alpha, filters, block_id):
     # Project
     x = layers.Conv2D(pointwise_filters,
                       kernel_size=1,
-                      padding='same',
+                      padding='valid',
                       use_bias=False,
                       activation=None,
                       name=prefix + 'project')(x)
     x = layers.BatchNormalization(axis=channel_axis,
-                                  epsilon=1e-3,
-                                  momentum=0.999,
+                                  epsilon=0.000009999999747378752,
+                                  momentum=0.8999999761581421,
                                   name=prefix + 'project_BN')(x)
 
     if in_channels == pointwise_filters and stride == 1:

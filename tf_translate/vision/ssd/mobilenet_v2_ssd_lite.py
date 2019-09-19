@@ -1,6 +1,6 @@
 from functools import partial
 
-from tensorflow.python.keras.layers import SeparableConv2D, Conv2D, DepthwiseConv2D, BatchNormalizationV2, ReLU
+from tensorflow.python.keras.layers import SeparableConv2D, Conv2D, DepthwiseConv2D, BatchNormalizationV2, ReLU, ZeroPadding2D
 from tensorflow.python.keras.models import Sequential
 
 from vision.nn.mobilenet_v2 import MobileNetV2, inverted_res_block
@@ -14,7 +14,7 @@ def create_mobilenetv2_ssd_lite(num_classes, width_mult=1.0, is_test=False):
                            include_top=False, alpha=width_mult, weights=None)
 
     source_layer_indexes = [
-        GraphPath((117, 126), 'conv', 3),
+        GraphPath((127, 136), 'conv', 3),
         len(base_net.layers),
     ]
     extras = [
@@ -31,21 +31,21 @@ def create_mobilenetv2_ssd_lite(num_classes, width_mult=1.0, is_test=False):
 
     regression_headers = [
         # TODO change to relu6
-        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3, padding='same'),
-        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3, padding='same'),
-        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3, padding='same'),
-        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3, padding='same'),
-        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3, padding='same'),
-        Conv2D(filters=6 * 4, kernel_size=1),
+        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3, padding='valid'),
+        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3, padding='valid'),
+        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3, padding='valid'),
+        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3, padding='valid'),
+        SeparableConv2D_with_batchnorm(filters=6 * 4, kernel_size=3, padding='valid'),
+        Conv2D(filters=6 * 4, kernel_size=1, padding='valid'),
     ]
 
     classification_headers = [
-        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, padding='same'),
-        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, padding='same'),
-        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, padding='same'),
-        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, padding='same'),
-        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, padding='same'),
-        Conv2D(filters=6 * num_classes, kernel_size=1),
+        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, padding='valid'),
+        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, padding='valid'),
+        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, padding='valid'),
+        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, padding='valid'),
+        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, padding='valid'),
+        Conv2D(filters=6 * num_classes, kernel_size=1, padding='valid'),
     ]
 
     return SSD(num_classes, base_net, source_layer_indexes,
@@ -54,8 +54,9 @@ def create_mobilenetv2_ssd_lite(num_classes, width_mult=1.0, is_test=False):
 
 def SeparableConv2D_with_batchnorm(filters, kernel_size, padding):
     return Sequential([
+        ZeroPadding2D(padding=(1, 1)),
         DepthwiseConv2D(kernel_size=kernel_size, padding=padding),
-        BatchNormalizationV2(epsilon=0.000009999999747378752),
+        BatchNormalizationV2(epsilon=0.000009999999747378752, momentum=0.8999999761581421),
         ReLU(max_value=6.),
         Conv2D(filters=filters, kernel_size=1, padding=padding)
     ])
