@@ -4,17 +4,20 @@ import tensorflow as tf
 from .data_preprocessing import PredictionTransform
 from ..utils import box_utils
 from ..utils.misc import Timer
+from vision.utils.box_utils_numpy import convert_locations_to_boxes, center_form_to_corner_form
 
 
 class Predictor:
     def __init__(self, net, size, mean=0.0, std=1.0, nms_method=None,
-                 iou_threshold=0.45, filter_threshold=0.01, candidate_size=200, sigma=0.5):
+                 iou_threshold=0.45, filter_threshold=0.01, candidate_size=200, sigma=0.5, config=None):
         self.net = net
         self.transform = PredictionTransform(size, mean, std)
         self.iou_threshold = iou_threshold
         self.filter_threshold = filter_threshold
         self.candidate_size = candidate_size
         self.nms_method = nms_method
+        self.config = config
+        self.priors = config.priors
 
         self.sigma = sigma
 
@@ -25,10 +28,15 @@ class Predictor:
         image = self.transform(image)
         image = np.expand_dims(image, 0)
 
+        inputs = {'input': image}
+
         self.timer.start()
-        scores, boxes = self.net.ssd.predict(image)
+        scores, locations = self.net.run(inputs)
         print("Inference time: ", self.timer.end())
 
+        boxes = convert_locations_to_boxes(locations, self.priors, self.config.center_variance,
+                                           self.config.size_variance)
+        boxes = center_form_to_corner_form(boxes)
         boxes = boxes[0]
         scores = scores[0]
         if not prob_threshold:
