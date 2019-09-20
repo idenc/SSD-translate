@@ -34,8 +34,8 @@ class Predictor:
         self.net.run(inputs)
         print("Inference time: ", self.timer.end())
 
-        scores = self.net.tensor('output1').map()
-        locations = self.net.tensor('output2').map()
+        scores = self.net.tensor('output2').map()
+        locations = self.net.tensor('output1').map()
 
         boxes = convert_locations_to_boxes(locations, self.priors, self.config.center_variance,
                                            self.config.size_variance)
