@@ -8,8 +8,8 @@ from deepviewrt.context import Context
 
 from vision.utils.misc import Timer
 
-if len(sys.argv) < 4:
-    print('Usage: python run_ssd_example.py <net type>  <model path> <label path> [video file]')
+if len(sys.argv) < 2:
+    print('Usage: python run_ssd_example.py <model path>')
     sys.exit(0)
 
 model_path = sys.argv[1]
