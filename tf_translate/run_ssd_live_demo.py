@@ -1,14 +1,14 @@
 import sys
 
 import cv2
-from vision.ssd.mobilenet_v2_ssd_lite import create_mobilenetv2_ssd_lite_predictor
+from vision.ssd.predictor import Predictor
 from vision.ssd.config import mobilenetv1_ssd_config as config
 from WebcamCapture import WebcamVideoStream
 from deepviewrt.context import Context
 
 from vision.utils.misc import Timer
 
-if len(sys.argv) < 2:
+if len(sys.argv) < 3:
     print('Usage: python run_ssd_example.py <model path>')
     sys.exit(0)
 
@@ -29,7 +29,7 @@ client = Context()
 in_file = open(model_path, 'rb')
 client.load(in_file.read())
 
-predictor = create_mobilenetv2_ssd_lite_predictor(client, config)
+predictor = Predictor(client, config.image_size, config=config)
 
 cap = WebcamVideoStream(cap).start()
 
