@@ -11,11 +11,11 @@ from PIL import Image, ImageDraw
 
 def main():
     CONFIGS = {
-        'max_num_samples': 1,
+        'max_num_samples': 3,
         'dataset_path': r'C:\Users\idenc\Downloads\superheroes',
         'collage_save_path': r"C:\Users\idenc\Documents\collages",
         'collage_record_save_path': r"C:\Users\idenc\Documents\superhero_singles",
-        'collage_count': 10000,
+        'collage_count': 20000,
         'train_split': 0.9,
         'augmentation_settings': {
             'rotate': {
@@ -60,7 +60,6 @@ def main():
             noisy = image + gauss
             return noisy.astype(np.uint8)
         elif noise_typ == "s&p":
-            row, col, ch = image.shape
             s_vs_p = 0.5
             amount = 0.004
             out = np.copy(image)
@@ -304,7 +303,6 @@ def main():
                 if show_tile or (i == (max_num_samples - 1) and not bounding_boxes):
                     # extract tile information
                     tile = self.original_samples[i]
-                    # image_to_paste = tile.image.convert('RGBA')
                     image_to_paste = tile.image
                     # ImageDraw.floodfill(image_to_paste, (10, 10), (255, 255, 255, 0), thresh=15)
 
@@ -488,7 +486,7 @@ def main():
 
         save_label_map(class_label_map, CONFIGS['collage_record_save_path'])
         from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=11) as executor:
+        with ThreadPoolExecutor() as executor:
             futures = [executor.submit(gen_collages,
                                        t, train_count, val_count, train_writer, val_writer, class_label_map)
                        for t in range(CONFIGS['collage_count'])]
