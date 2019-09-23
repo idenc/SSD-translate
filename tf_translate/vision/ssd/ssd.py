@@ -1,15 +1,16 @@
 from collections import namedtuple
 from typing import List
 
-import tensorflow as tf
-
+from tensorflow.python.keras.models import Model, load_model
+from tensorflow.python.keras.layers import Concatenate, Add, Reshape, Softmax
+from tensorflow.python.keras.initializers import glorot_uniform, Zeros
 from ..utils import box_utils
 
 GraphPath = namedtuple("GraphPath", ['s0', 's1'])  #
 
 
 class SSD:
-    def __init__(self, num_classes: int, base_net: tf.keras.Model, source_layer_indexes: List[int],
+    def __init__(self, num_classes: int, base_net: Model, source_layer_indexes: List[int],
                  extras: List, classification_headers: List,
                  regression_headers: List, is_test=False, config=None, is_train=False):
         """
@@ -34,11 +35,11 @@ class SSD:
         confidences, locations = self.call(self.base_net.input)
 
         if is_train:
-            one_big_prediction = tf.keras.layers.Concatenate()
+            one_big_prediction = Concatenate()
             output = one_big_prediction([confidences, locations])
-            self.ssd = tf.keras.models.Model(inputs=self.base_net.input, outputs=output)
+            self.ssd = Model(inputs=self.base_net.input, outputs=output)
         else:
-            self.ssd = tf.keras.models.Model(inputs=self.base_net.input, outputs=[confidences, locations])
+            self.ssd = Model(inputs=self.base_net.input, outputs=[confidences, locations])
 
     def get_start_layer(self):
         if isinstance(self.source_layer_indexes[0], GraphPath):
@@ -68,7 +69,7 @@ class SSD:
                 path = None
             x = self.base_net.layers[start_layer_index - 1].output
             for layer in self.base_net.layers[start_layer_index: end_layer_index]:
-                if type(layer) == tf.keras.layers.Add:
+                if type(layer) == Add:
                     x = layer(layer.input)
                 else:
                     x = layer(x)
@@ -104,11 +105,11 @@ class SSD:
             confidences.append(confidence)
             locations.append(location)
 
-        confidences = tf.keras.layers.Concatenate(1)(confidences)
-        locations = tf.keras.layers.Concatenate(1)(locations)
+        confidences = Concatenate(1)(confidences)
+        locations = Concatenate(1)(locations)
 
         if self.is_test:
-            confidences = tf.keras.layers.Softmax(axis=2)(confidences)
+            confidences = Softmax(axis=2)(confidences)
             boxes = box_utils.convert_locations_to_boxes(
                 locations, self.priors, self.config.center_variance, self.config.size_variance
             )
@@ -119,15 +120,25 @@ class SSD:
 
     def compute_header(self, i, x):
         confidence = self.classification_headers[i](x)
-        confidence = tf.keras.layers.Reshape((-1, self.num_classes))(confidence)
+        confidence = Reshape((-1, self.num_classes))(confidence)
 
         location = self.regression_headers[i](x)
-        location = tf.keras.layers.Reshape((-1, 4))(location)
+        location = Reshape((-1, 4))(location)
 
         return confidence, location
 
-    def load(self, model):
-        self.ssd = tf.keras.models.load_model(model)
+    def init_from_pretrained_ssd(self, weights_path):
+        self.ssd.load_weights(weights_path, by_name=True)
+        for layer in self.ssd.layers:
+            if layer in self.classification_headers or layer in self.regression_headers:
+                w = layer.get_weights()
+                if len(w) > 1:  # Layer has bias
+                    new_weights = []
+                    new_weights.append(glorot_uniform()(w[0].shape))
+                    new_weights.append(Zeros()(w[1].shape))
+                else:
+                    new_weights = glorot_uniform()(w.shape)
+                layer.set_weights(new_weights)
 
 
 class MatchPrior(object):

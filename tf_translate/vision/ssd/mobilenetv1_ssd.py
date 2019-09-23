@@ -46,12 +46,12 @@ def create_mobilenetv1_ssd(num_classes, is_test=False, is_train=False):
     ]
 
     classification_headers = [
-        Conv2D(filters=6 * num_classes, kernel_size=3, padding="same"),
-        Conv2D(filters=6 * num_classes, kernel_size=3, padding="same"),
-        Conv2D(filters=6 * num_classes, kernel_size=3, padding="same"),
-        Conv2D(filters=6 * num_classes, kernel_size=3, padding="same"),
-        Conv2D(filters=6 * num_classes, kernel_size=3, padding="same"),
-        Conv2D(filters=6 * num_classes, kernel_size=3, padding="same"),  # TODO: change to kernel_size=1, padding=0?
+        Conv2D(filters=6 * num_classes, kernel_size=3, padding="same", name='conv_extra_1_' + str(6 * num_classes)),
+        Conv2D(filters=6 * num_classes, kernel_size=3, padding="same", name='conv_extra_2_' + str(6 * num_classes)),
+        Conv2D(filters=6 * num_classes, kernel_size=3, padding="same", name='conv_extra_3_' + str(6 * num_classes)),
+        Conv2D(filters=6 * num_classes, kernel_size=3, padding="same", name='conv_extra_4_' + str(6 * num_classes)),
+        Conv2D(filters=6 * num_classes, kernel_size=3, padding="same", name='conv_extra_5_' + str(6 * num_classes)),
+        Conv2D(filters=6 * num_classes, kernel_size=3, padding="same", name='conv_extra_6_' + str(6 * num_classes)),  # TODO: change to kernel_size=1, padding=0?
     ]
 
     return SSD(num_classes, base_net, source_layer_indexes,

@@ -29,8 +29,8 @@ class MultiboxLoss(tf.keras.Model):
                 confidence (batch_size, num_priors, num_classes): class predictions.
                 locations (batch_size, num_priors, 4): predicted locations.
         """
-        confidence = y_pred[:, :, :21]
-        predicted_locations = y_pred[:, :, 21:]
+        confidence = y_pred[:, :, :y_pred.shape[2] - 4]
+        predicted_locations = y_pred[:, :, y_pred.shape[2] - 4:]
         gt_locations = y_true[:, :, :4]
         labels = tf.cast(y_true[:, :, 4], dtype=tf.int64)
         num_classes = confidence.shape[2]

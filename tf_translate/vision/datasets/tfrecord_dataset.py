@@ -103,7 +103,7 @@ class RecordDataset(Sequence):
         inputs, target1, target2 = [], [], []
         for sample in self.dataset.take(self.batch_size):
             boxes, labels, is_difficult = self._get_annotation(sample)
-            if not self.keep_difficult:
+            if not self.keep_difficult and is_difficult:
                 boxes = boxes[is_difficult == 0]
                 labels = labels[is_difficult == 0]
             image = self._read_image(sample)
@@ -142,7 +142,7 @@ class RecordDataset(Sequence):
             boxes.append([x_min, y_min, x_max, y_max])
 
             labels.append(sample['image/object/class/label'].values[i].numpy())
-            is_difficult.append(sample['image/object/difficult'].values[i].numpy())
+            # is_difficult.append(sample['image/object/difficult'].values[i].numpy())
 
         return (np.array(boxes, dtype=np.float32),
                 np.array(labels, dtype=np.int64),
@@ -154,7 +154,3 @@ class RecordDataset(Sequence):
     def parse_sample(self, data_record):
         sample = parse_single_example(data_record, self.keys_to_features)
         return sample
-
-
-if __name__ == 'main':
-    record = RecordDataset(r'D:\train\tf_records')

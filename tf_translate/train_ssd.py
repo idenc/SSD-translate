@@ -9,7 +9,9 @@ import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 import tensorflow as tf
-from sgdr import SGDRScheduler
+
+os.environ['TF_KERAS'] = "1"
+from keras_radam import RAdam
 
 from vision.datasets.open_images import OpenImagesDataset
 # from vision.ssd.mobilenetv1_ssd_lite import create_mobilenetv1_ssd_lite
@@ -199,13 +201,14 @@ if __name__ == '__main__':
         datasets.append(dataset)
     datasets = ConcatDataset(datasets)
     logging.info(f"Stored labels into file {label_file}.")
+    logging.info(f"Found {num_classes} classes")
     logging.info("Train dataset size: {}".format(datasets.data_length))
 
     """
     Get Validation dataset
     """
     logging.info("Prepare Validation dataset.")
-    if args.dataset_type == "voc" or args.dataset_type == 'tfrecord':
+    if args.dataset_type == "voc":
         val_dataset = VOCDataset(args.validation_dataset, transform=test_transform,
                                  target_transform=target_transform, is_test=True, batch_size=args.batch_size)
     elif args.dataset_type == 'open_images':
@@ -213,6 +216,10 @@ if __name__ == '__main__':
                                         transform=test_transform, target_transform=target_transform,
                                         dataset_type="test")
         logging.info(val_dataset)
+    elif args.dataset_type == 'tfrecord':
+        val_dataset = RecordDataset(args.validation_dataset, transform=test_transform,
+                                    target_transform=target_transform,
+                                    is_test=True, batch_size=args.batch_size)
     logging.info("validation dataset size: {}".format(val_dataset.num_records))
 
     """
@@ -253,7 +260,10 @@ if __name__ == '__main__':
     """
     criterion = MultiboxLoss(config.priors, iou_threshold=0.5, neg_pos_ratio=3,
                              center_variance=0.1, size_variance=0.2)
-    optimizer = tf.keras.optimizers.SGD(lr=args.lr, momentum=args.momentum, decay=args.weight_decay)
+    # optimizer = tf.keras.optimizers.SGD(lr=args.lr, momentum=args.momentum, decay=args.weight_decay)
+    optimizer = RAdam(min_lr=1e-5,
+                      total_steps=math.ceil(args.num_epochs / args.batch_size) * args.num_epochs,
+                      weight_decay=5e-4)
 
     """
     Load any specified weights before training
@@ -261,7 +271,8 @@ if __name__ == '__main__':
     timer.start("Load Model")
     if args.resume:
         logging.info(f"Resume from the model {args.resume}")
-        net.ssd = tf.keras.models.load_model(args.resume, custom_objects={'forward': criterion.forward})
+        net.ssd = tf.keras.models.load_model(args.resume,
+                                             custom_objects={'forward': criterion.forward, 'RAdam': optimizer})
         epoch_idx = args.resume.find('Epoch')
         last_epoch = int(args.resume[epoch_idx + 6:epoch_idx + 8])
     elif args.base_net:
@@ -269,7 +280,8 @@ if __name__ == '__main__':
         net.base_net.load_weights(args.base_net, by_name=True)
     elif args.pretrained_ssd:
         logging.info(f"Init from pretrained ssd {args.pretrained_ssd}")
-        net.ssd.load_weights(args.pretrained_ssd, by_name=True)
+        # net.ssd.load_weights(args.pretrained_ssd, by_name=True)
+        net.init_from_pretrained_ssd(args.pretrained_ssd)
     logging.info(f'Took {timer.end("Load Model"):.2f} seconds to load the model.')
 
     """
@@ -286,7 +298,8 @@ if __name__ == '__main__':
         verbose=1,
         save_best_only=True,
         save_weights_only=False,
-        mode='auto')
+        mode='auto',
+        period=2)
     early_stopper = tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5,
                                                      verbose=0,
                                                      mode='auto', baseline=None,
@@ -294,8 +307,8 @@ if __name__ == '__main__':
     tensorboard = tf.keras.callbacks.TensorBoard()  # Not used, add to callbacks list to use
     plot = PlotLosses()
     # lr_scheduler = tf.keras.callbacks.LearningRateScheduler(lr_schedule, verbose=1)
-    lr_scheduler = SGDRScheduler(min_lr=1e-5, max_lr=1e-2, steps_per_epoch=math.ceil(args.num_epochs / args.batch_size))
-    callbacks = [model_checkpoint, early_stopper, plot, lr_scheduler]
+    # lr_scheduler = SGDRScheduler(min_lr=1e-5, max_lr=1e-2, steps_per_epoch=math.ceil(args.num_epochs / args.batch_size))
+    callbacks = [model_checkpoint, early_stopper, plot]
 
     logging.info(f"Learning rate: {args.lr}, Base net learning rate: {base_net_lr}, "
                  + f"Extra Layers learning rate: {extra_layers_lr}.")
@@ -315,6 +328,6 @@ if __name__ == '__main__':
                           steps_per_epoch=len(datasets),
                           epochs=args.num_epochs, verbose=1,
                           callbacks=callbacks, validation_data=val_dataset,
-                          validation_steps=len(val_dataset),
+                          validation_steps=len(val_dataset), validation_freq=2,
                           initial_epoch=last_epoch, use_multiprocessing=False,
                           workers=args.num_workers, max_queue_size=args.max_queue_size)
