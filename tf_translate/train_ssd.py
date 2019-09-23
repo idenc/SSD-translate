@@ -323,7 +323,7 @@ if __name__ == '__main__':
                                                      restore_best_weights=True)
     tensorboard = tf.keras.callbacks.TensorBoard()  # Not used, add to callbacks list to use
     plot = PlotLosses()
-    if args.lr_scheduler == 'SGDR':
+    if args.lr_scheduler == 'SGDR' and args.optimizer == 'SGD':
         lr_scheduler = SGDRScheduler(min_lr=1e-5, max_lr=1e-2,
                                      steps_per_epoch=math.ceil(args.num_epochs / args.batch_size))
     callbacks.append(model_checkpoint)

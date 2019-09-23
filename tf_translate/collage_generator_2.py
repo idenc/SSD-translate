@@ -4,6 +4,7 @@ import random
 
 import Augmentor
 import matplotlib.pyplot as plt
+import numpy as np
 import tensorflow as tf
 from PIL import Image, ImageDraw
 
@@ -46,6 +47,46 @@ def main():
         # Random samples from background directory
         'collage_background_colour': (255, 255, 255)
     }
+
+    def noisy(noise_typ, image):
+        if noise_typ == "gauss":
+            col, row = image.size
+            ch = 4
+            mean = 0
+            var = 0.1
+            sigma = var ** 0.5
+            gauss = np.random.normal(mean, sigma, (row, col, ch))
+            gauss = gauss.reshape(row, col, ch)
+            noisy = image + gauss
+            return noisy.astype(np.uint8)
+        elif noise_typ == "s&p":
+            row, col, ch = image.shape
+            s_vs_p = 0.5
+            amount = 0.004
+            out = np.copy(image)
+            # Salt mode
+            num_salt = np.ceil(amount * image.size * s_vs_p)
+            coords = [np.random.randint(0, i - 1, int(num_salt))
+                      for i in image.shape]
+            out[coords] = 1
+
+            # Pepper mode
+            num_pepper = np.ceil(amount * image.size * (1. - s_vs_p))
+            coords = [np.random.randint(0, i - 1, int(num_pepper))
+                      for i in image.shape]
+            out[coords] = 0
+            return out
+        elif noise_typ == "poisson":
+            vals = len(np.unique(image))
+            vals = 2 ** np.ceil(np.log2(vals))
+            noisy = np.random.poisson(image * vals) / float(vals)
+            return noisy.astype(np.uint8)
+        elif noise_typ == "speckle":
+            row, col, ch = image.shape
+            gauss = np.random.randn(row, col, ch)
+            gauss = gauss.reshape(row, col, ch)
+            noisy = image + image * gauss
+            return noisy
 
     class Sample:
         """
@@ -105,7 +146,7 @@ def main():
             file_paths = [os.path.join(dataset_path, cls, file) for file in files]
             images = []
             for img_path in file_paths:
-                images.append((img_path, Image.open(img_path)))
+                images.append((img_path, Image.open(img_path).convert("RGBA")))
             dataset[cls] = images
         else:
             print("WARNING: class directory '" + cls + "' is empty -> skipping.")
@@ -216,7 +257,8 @@ def main():
                 # assert uniqueness then save as a Sample object
                 if random_image_path not in sample_paths:
                     sample_paths.append(random_image_path)
-                    sample = random_image
+                    sample = random_image.copy()
+
                     sample = Sample(random_image_path,
                                     random_class,
                                     sample)
@@ -239,16 +281,16 @@ def main():
             self.pipeline = Augmentor.Pipeline()
 
             augmentation_settings = self.CONFIGS['augmentation_settings']
-            self.pipeline.rotate(**augmentation_settings['rotate'])
+            self.pipeline.rotate_without_crop(**augmentation_settings['rotate'])
             # self.pipeline.zoom(**augmentation_settings['zoom']) # Zoom breaks bounding box generation
             self.pipeline.random_distortion(**augmentation_settings['random_distortion'])
             self.pipeline.flip_left_right(**augmentation_settings['flip_left_right'])
             self.pipeline.flip_top_bottom(**augmentation_settings['flip_top_bottom'])
-            self.pipeline.crop_random(probability=0.25, percentage_area=0.97)
+            self.pipeline.rotate_random_90(probability=0.3)
+            # self.pipeline.crop_random(probability=0.25, percentage_area=0.97)
             self.pipeline.skew(probability=0.5)
-            # self.pipeline.random_color(probability=0.3, min_factor=0.0, max_factor=1.0)
-            self.pipeline.random_contrast(probability=0.4, min_factor=0.3, max_factor=2.0)
-            self.pipeline.random_brightness(probability=0.4, min_factor=0.3, max_factor=2.0)
+            self.pipeline.random_contrast(probability=0.4, min_factor=0.3, max_factor=3.0)
+            self.pipeline.random_brightness(probability=0.4, min_factor=0.3, max_factor=3.0)
 
         def __paste_image(self, collage):
             bounding_boxes, labels = [], []
@@ -262,19 +304,22 @@ def main():
                 if show_tile or (i == (max_num_samples - 1) and not bounding_boxes):
                     # extract tile information
                     tile = self.original_samples[i]
-                    image_to_paste = tile.image.convert('RGBA')
+                    # image_to_paste = tile.image.convert('RGBA')
+                    image_to_paste = tile.image
                     # ImageDraw.floodfill(image_to_paste, (10, 10), (255, 255, 255, 0), thresh=15)
 
-                    for operation in self.pipeline.operations:
-                        r = round(random.uniform(0, 1), 1)
-                        if r <= operation.probability:
-                            image_to_paste = operation.perform_operation([image_to_paste])[0]
                     # resize image
                     scale = image_to_paste.width / image_to_paste.height
                     new_size = random.randint(int(collage.height * 0.3), int(collage.height * 0.9))
                     new_size = (int(new_size * scale), new_size)
                     image_to_paste = image_to_paste.resize(new_size, Image.ANTIALIAS)
 
+                    for operation in self.pipeline.operations:
+                        r = round(random.uniform(0, 1), 1)
+                        if r <= operation.probability:
+                            image_to_paste = operation.perform_operation([image_to_paste])[0]
+
+                    image_to_paste = Image.fromarray(noisy('poisson', image_to_paste))
                     # determine position of image within collage
                     x = random.randint(0, max(collage.width - image_to_paste.width, 1))
                     y = random.randint(0, max(collage.height - image_to_paste.height, 1))
@@ -396,6 +441,30 @@ def main():
                 line = "item {\n    id: " + str(label_map[label]) + "\n    name: '" + label + "'\n}\n"
                 f.write(line)
 
+    def gen_collages(t, train_count, val_count, train_writer, val_writer, class_label_map):
+        collage = SquareCollage(CONFIGS)
+
+        if t < train_count:
+            print("processing train set annotations " + str(t + 1) + " of " + str(train_count))
+            filename = "aug_train_" + str(t) + ".jpg"
+            writer = train_writer
+        else:
+            print("processing val set annotations " + str(t - train_count + 1) + " of " + str(val_count))
+            filename = "aug_val_" + str(t) + ".jpg"
+            writer = val_writer
+
+        # save collage as JPEG image
+        # image_save_path = os.path.join(CONFIGS['collage_save_path'], filename)
+        # collage.collage.save(image_save_path, "JPEG")
+
+        # create a TF example using image + annotation data
+        annotation = create_annotation(collage, filename)
+        val_tf_example = create_tf_example(annotation, CONFIGS['collage_save_path'], class_label_map,
+                                           collage.collage)
+
+        # write serialized TF example
+        writer.write(val_tf_example.SerializeToString())
+
     def create_collages(CONFIGS):
         # create save directories
         os.makedirs(CONFIGS['collage_save_path'], exist_ok=True)
@@ -418,29 +487,13 @@ def main():
             class_label_map[classes[k]] = k + 1
 
         save_label_map(class_label_map, CONFIGS['collage_record_save_path'])
-        for t in range(CONFIGS['collage_count']):
-            collage = SquareCollage(CONFIGS)
-
-            if t < train_count:
-                print("processing train set annotations " + str(t + 1) + " of " + str(train_count))
-                filename = "aug_train_" + str(t) + ".jpg"
-                writer = train_writer
-            else:
-                print("processing val set annotations " + str(t - train_count + 1) + " of " + str(val_count))
-                filename = "aug_val_" + str(t) + ".jpg"
-                writer = val_writer
-
-            # save collage as JPEG image
-            # image_save_path = os.path.join(CONFIGS['collage_save_path'], filename)
-            # collage.collage.save(image_save_path, "JPEG")
-
-            # create a TF example using image + annotation data
-            annotation = create_annotation(collage, filename)
-            val_tf_example = create_tf_example(annotation, CONFIGS['collage_save_path'], class_label_map,
-                                               collage.collage)
-
-            # write serialized TF example
-            writer.write(val_tf_example.SerializeToString())
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=11) as executor:
+            futures = [executor.submit(gen_collages,
+                                       t, train_count, val_count, train_writer, val_writer, class_label_map)
+                       for t in range(CONFIGS['collage_count'])]
+            for future in futures:
+                future.result()
 
     # Finally create all collages
     create_collages(CONFIGS)
