@@ -60,7 +60,7 @@ cap = WebcamVideoStream(cap).start()
 
 timer = Timer()
 while True:
-    ret, orig_image = cap.read()
+    orig_image = cap.read()
     if orig_image is None:
         continue
     image = cv2.cvtColor(orig_image, cv2.COLOR_BGR2RGB)
