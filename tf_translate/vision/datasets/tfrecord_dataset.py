@@ -35,7 +35,6 @@ class RecordDataset(Sequence):
                     self.num_records = int(f.read())
 
         if buffer_size is None:
-            # Load whole dataset into memory
             buffer_size = self.num_records
 
         self.keys_to_features = {
@@ -78,16 +77,34 @@ class RecordDataset(Sequence):
         # if the labels file exists, read in the class names
         label_file_name = self.root / "label_map.txt"
 
+        self._get_classes(label_file_name)
+        self.class_dict = {class_name: i for i, class_name in enumerate(self.class_names)}
+
+    def _get_classes(self, label_file_name):
         if os.path.isfile(label_file_name):
-            # Classes should be a text file with class label on each line
             classes = []
             with open(label_file_name, 'r') as infile:
-                for line in infile:
-                    classes.append(line.rstrip())
+                first_line = infile.readline()
+                if first_line.rstrip() == 'item {':
+                    parse_tfrecord = True
+                else:
+                    parse_tfrecord = False
+                if not parse_tfrecord:  # Classes are a text file with class label on each line
+                    classes.append(first_line)
+                    for line in infile:
+                        classes.append(line.rstrip())
+                else:  # Classes are in tfrecord format
+                    for line in infile:
+                        line = line.strip()
+                        if line.startswith('name: '):
+                            line = line.replace('\'', '')
+                            classes.append(line[5:].strip())
+
+            if 'BACKGROUND' not in classes:
+                classes.insert(0, 'BACKGROUND')
 
             self.class_names = tuple(classes)
             logging.info("VOC Labels read from file: " + str(self.class_names))
-
         else:
             logging.info("No labels file, using default VOC classes.")
             self.class_names = ('BACKGROUND',
@@ -96,8 +113,6 @@ class RecordDataset(Sequence):
                                 'cow', 'diningtable', 'dog', 'horse',
                                 'motorbike', 'person', 'pottedplant',
                                 'sheep', 'sofa', 'train', 'tvmonitor')
-
-        self.class_dict = {class_name: i for i, class_name in enumerate(self.class_names)}
 
     def __getitem__(self, idx):
         inputs, target1, target2 = [], [], []
