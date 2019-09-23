@@ -4,8 +4,10 @@ import cv2
 import pandas as pd
 import copy
 
+from tensorflow.python.keras.utils.data_utils import Sequence
 
-class OpenImagesDataset:
+
+class OpenImagesDataset(Sequence):
 
     def __init__(self, root,
                  transform=None, target_transform=None,
@@ -16,6 +18,7 @@ class OpenImagesDataset:
         self.dataset_type = dataset_type.lower()
 
         self.data, self.class_names, self.class_dict = self._read_data()
+        self.num_records = len(self.data)
         self.balance_data = balance_data
         self.min_image_num = -1
         if self.balance_data:
@@ -41,8 +44,16 @@ class OpenImagesDataset:
             boxes, labels = self.target_transform(boxes, labels)
         return image_info['image_id'], image, boxes, labels
 
-    def __getitem__(self, index):
-        _, image, boxes, labels = self._getitem(index)
+    def __getitem__(self, idx):
+        inputs, target1, target2 = [], [], []
+        end = (idx + 1) * self.batch_size
+        if end >= self.num_records:
+            end = self.num_records
+        idxs = np.arange(idx * self.batch_size, end)
+        if self.shuffle:
+            np.random.shuffle(idxs)
+        for j, i in enumerate(idxs):
+            _, image, boxes, labels = self._getitem(i)
         return image, boxes, labels
 
     def get_annotation(self, index):
