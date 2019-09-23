@@ -1,21 +1,20 @@
 import argparse
 import itertools
 import logging
+import math
 import os
 import sys
-import math
 import warnings
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 import tensorflow as tf
-
-os.environ['TF_KERAS'] = "1"
-from keras_radam import RAdam
+from matplotlib import pyplot as plt
+import numpy as np
 
 from vision.datasets.open_images import OpenImagesDataset
-# from vision.ssd.mobilenetv1_ssd_lite import create_mobilenetv1_ssd_lite
-# from vision.ssd.mobilenet_v2_ssd_lite import create_mobilenetv2_ssd_lite
+from vision.ssd.mobilenetv1_ssd_lite import create_mobilenetv1_ssd_lite
+from vision.ssd.mobilenet_v2_ssd_lite import create_mobilenetv2_ssd_lite
 # from vision.ssd.squeezenet_ssd_lite import create_squeezenet_ssd_lite
 from vision.datasets.voc_dataset import VOCDataset
 from vision.datasets.concat_datasets import ConcatDataset
@@ -29,7 +28,7 @@ from vision.ssd.vgg_ssd import create_vgg_ssd
 from vision.ssd.mobilenetv1_ssd import create_mobilenetv1_ssd
 from vision.ssd.ssd import MatchPrior
 from vision.utils.misc import str2bool, Timer, freeze_net_layers, store_labels
-from matplotlib import pyplot as plt
+from sgdr import SGDRScheduler
 
 
 class PlotLosses(tf.keras.callbacks.Callback):
@@ -37,9 +36,9 @@ class PlotLosses(tf.keras.callbacks.Callback):
         if logs is None:
             logs = {}
         self.i = 0
-        self.x = []
-        self.losses = []
-        self.val_losses = []
+        self.x = np.array([])
+        self.losses = np.array([])
+        self.val_losses = np.array([])
 
         self.fig = plt.figure()
 
@@ -49,13 +48,17 @@ class PlotLosses(tf.keras.callbacks.Callback):
         if logs is None:
             logs = {}
         self.logs.append(logs)
-        self.x.append(self.i)
-        self.losses.append(logs.get('loss'))
-        self.val_losses.append(logs.get('val_loss'))
+        self.x = np.append(self.x, self.i)
+        self.losses = np.append(self.losses, logs.get('loss'))
+        self.val_losses = np.append(self.val_losses, logs.get('val_loss'))
+        val_mask = np.isfinite(self.val_losses.astype(np.double))
         self.i += 1
 
         plt.plot(self.x, self.losses, label="loss")
-        plt.plot(self.x, self.val_losses, label="val_loss")
+        if np.any(val_mask):
+            plt.plot(self.x[val_mask], self.val_losses[val_mask], label="val_loss")
+        else:
+            plt.plot(self.x, self.val_losses, label="val_loss")
         plt.ion()
         plt.legend()
         plt.show()
@@ -92,7 +95,11 @@ parser.add_argument('--freeze_net', action='store_true',
 parser.add_argument('--mb2_width_mult', default=1.0, type=float,
                     help='Width Multiplifier for MobilenetV2')
 
-# Params for SGD
+# Params for Optimizer
+parser.add_argument('--optimizer', default='SGD', type=str, help='What optimizer to use while training',
+                    choices=['SGD', 'Adam', 'RAdam'])
+parser.add_argument('--lr_scheduler', default='SGDR', choices=[None, 'SGDR'],
+                    help="Use learning rate scheduler (only applies with SGD)")
 parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float,
                     help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float,
@@ -126,7 +133,7 @@ parser.add_argument('--save_format', choices=['h5', 'tf'],
                     help="What save format to use in model checkpoint callback. "
                          "h5 to save whole model to .h5 file and tf to save to Tensorflow SavedModel format",
                     default='h5')
-parser.add_argument('--checkpoint_folder', default='models/',
+parser.add_argument('--checkpoint_folder', default='models',
                     help='Directory for saving checkpoint models')
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
@@ -260,10 +267,20 @@ if __name__ == '__main__':
     """
     criterion = MultiboxLoss(config.priors, iou_threshold=0.5, neg_pos_ratio=3,
                              center_variance=0.1, size_variance=0.2)
-    # optimizer = tf.keras.optimizers.SGD(lr=args.lr, momentum=args.momentum, decay=args.weight_decay)
-    optimizer = RAdam(min_lr=1e-5,
-                      total_steps=math.ceil(args.num_epochs / args.batch_size) * args.num_epochs,
-                      weight_decay=5e-4)
+    if args.optimizer == 'SGD':
+        optimizer = tf.keras.optimizers.SGD(lr=args.lr, momentum=args.momentum, decay=args.weight_decay)
+    elif args.optimizer == 'Adam':
+        optimizer = tf.keras.optimizers.Adam()
+    elif args.optimizer == 'RAdam':
+        os.environ['TF_KERAS'] = "1"
+        from keras_radam import RAdam
+
+        optimizer = RAdam(min_lr=1e-5,
+                          total_steps=math.ceil(args.num_epochs / args.batch_size) * args.num_epochs,
+                          weight_decay=args.weight_decay)
+    else:
+        logging.critical(f"Specified optimizer {args.optimizer} is unknown. Choose one of: SGD, Adam, RAdam")
+        raise SystemExit(-1)
 
     """
     Load any specified weights before training
@@ -272,7 +289,7 @@ if __name__ == '__main__':
     if args.resume:
         logging.info(f"Resume from the model {args.resume}")
         net.ssd = tf.keras.models.load_model(args.resume,
-                                             custom_objects={'forward': criterion.forward, 'RAdam': optimizer})
+                                             custom_objects={'forward': criterion.forward, args.optimizer: optimizer})
         epoch_idx = args.resume.find('Epoch')
         last_epoch = int(args.resume[epoch_idx + 6:epoch_idx + 8])
     elif args.base_net:
@@ -280,7 +297,6 @@ if __name__ == '__main__':
         net.base_net.load_weights(args.base_net, by_name=True)
     elif args.pretrained_ssd:
         logging.info(f"Init from pretrained ssd {args.pretrained_ssd}")
-        # net.ssd.load_weights(args.pretrained_ssd, by_name=True)
         net.init_from_pretrained_ssd(args.pretrained_ssd)
     logging.info(f'Took {timer.end("Load Model"):.2f} seconds to load the model.')
 
@@ -290,8 +306,9 @@ if __name__ == '__main__':
     model_filename = str(args.net) + "-Epoch-{epoch:02d}-Loss-{val_loss:.2f}"
     if args.save_format == 'h5':
         model_filename += '.h5'
-    # checkpoint_path = os.path.join(args.checkpoint_folder, model_filename)
-    checkpoint_path = args.checkpoint_folder + model_filename
+
+    callbacks = []
+    checkpoint_path = os.path.join(args.checkpoint_folder, model_filename)
     model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
         filepath=checkpoint_path,
         monitor='val_loss',
@@ -306,9 +323,12 @@ if __name__ == '__main__':
                                                      restore_best_weights=True)
     tensorboard = tf.keras.callbacks.TensorBoard()  # Not used, add to callbacks list to use
     plot = PlotLosses()
-    # lr_scheduler = tf.keras.callbacks.LearningRateScheduler(lr_schedule, verbose=1)
-    # lr_scheduler = SGDRScheduler(min_lr=1e-5, max_lr=1e-2, steps_per_epoch=math.ceil(args.num_epochs / args.batch_size))
-    callbacks = [model_checkpoint, early_stopper, plot]
+    if args.lr_scheduler == 'SGDR':
+        lr_scheduler = SGDRScheduler(min_lr=1e-5, max_lr=1e-2,
+                                     steps_per_epoch=math.ceil(args.num_epochs / args.batch_size))
+    callbacks.append(model_checkpoint)
+    callbacks.append(early_stopper)
+    callbacks.append(plot)
 
     logging.info(f"Learning rate: {args.lr}, Base net learning rate: {base_net_lr}, "
                  + f"Extra Layers learning rate: {extra_layers_lr}.")
