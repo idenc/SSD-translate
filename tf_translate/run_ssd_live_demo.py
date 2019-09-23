@@ -8,6 +8,7 @@ from vision.ssd.mobilenetv1_ssd import create_mobilenetv1_ssd, create_mobilenetv
 # from vision.ssd.squeezenet_ssd_lite import create_squeezenet_ssd_lite, create_squeezenet_ssd_lite_predictor
 # from vision.ssd.vgg_ssd import create_vgg_ssd, create_vgg_ssd_predictor
 from vision.utils.misc import Timer
+from WebcamCapture import WebcamVideoStream
 
 if len(sys.argv) < 4:
     print('Usage: python run_ssd_example.py <net type>  <model path> <label path> [video file]')
@@ -54,6 +55,8 @@ elif net_type == 'sq-ssd-lite':
 else:
     print("The net type is wrong. It should be one of vgg16-ssd, mb1-ssd and mb1-ssd-lite.")
     sys.exit(1)
+
+cap = WebcamVideoStream(cap).start()
 
 timer = Timer()
 while True:
