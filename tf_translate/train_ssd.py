@@ -27,7 +27,7 @@ from vision.ssd.data_preprocessing import TrainAugmentation, TestTransform
 from vision.ssd.vgg_ssd import create_vgg_ssd
 from vision.ssd.mobilenetv1_ssd import create_mobilenetv1_ssd
 from vision.ssd.ssd import MatchPrior
-from vision.utils.misc import str2bool, Timer, freeze_net_layers, store_labels
+from vision.utils.misc import str2bool, Timer, store_labels
 from sgdr import SGDRScheduler
 
 
@@ -242,7 +242,6 @@ if __name__ == '__main__':
     extra_layers_lr = args.extra_layers_lr if args.extra_layers_lr is not None else args.lr
     if args.freeze_base_net:
         logging.info("Freeze base net.")
-        freeze_net_layers(net.base_net)
         # params = itertools.chain(net.source_layer_add_ons.parameters(), net.extras.parameters(),
         #                          net.regression_headers.parameters(), net.classification_headers.parameters())
         params = [
@@ -333,9 +332,10 @@ if __name__ == '__main__':
                  + f"Extra Layers learning rate: {extra_layers_lr}.")
 
     # To test loss function
-    # input, y_true = datasets[0]
+    # tf.keras.backend.set_learning_phase(0)
+    # input, y_true = datasets[1]
     # with tf.device('/CPU:0'):
-    #     y_pred = net.ssd(input)
+    #     y_pred = net.ssd.predict(input)
     # loss = criterion.forward(y_true, y_pred)
 
     """

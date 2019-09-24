@@ -8,7 +8,7 @@ import tensorflow as tf
 
 from vision.datasets.open_images import OpenImagesDataset
 from vision.datasets.voc_dataset import VOCDataset
-# from vision.ssd.mobilenet_v2_ssd_lite import create_mobilenetv2_ssd_lite, create_mobilenetv2_ssd_lite_predictor
+from vision.ssd.mobilenet_v2_ssd_lite import create_mobilenetv2_ssd_lite, create_mobilenetv2_ssd_lite_predictor
 from vision.ssd.mobilenetv1_ssd import create_mobilenetv1_ssd, create_mobilenetv1_ssd_predictor
 # from vision.ssd.mobilenetv1_ssd_lite import create_mobilenetv1_ssd_lite, create_mobilenetv1_ssd_lite_predictor
 # from vision.ssd.squeezenet_ssd_lite import create_squeezenet_ssd_lite, create_squeezenet_ssd_lite_predictor
@@ -27,7 +27,7 @@ parser.add_argument("--dataset_type", default="voc", type=str,
 parser.add_argument("--dataset", type=str, help="The root directory of the dataset.", required=True)
 parser.add_argument("--label_file", type=str, help="The label file path.", required=True)
 parser.add_argument("--use_cuda", type=str2bool, default=True)
-parser.add_argument("--use_2007_metric", type=str2bool, default=True)
+parser.add_argument("--use_2007_metric", type=str2bool, default=False)
 parser.add_argument("--nms_method", type=str, default="hard")
 parser.add_argument("--iou_threshold", type=float, default=0.5, help="The threshold of Intersection over Union.")
 parser.add_argument("--eval_dir", default="eval_results", type=str, help="The directory to store evaluation results.")

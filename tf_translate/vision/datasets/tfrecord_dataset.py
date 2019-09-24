@@ -69,7 +69,7 @@ class RecordDataset(Sequence):
 
         self.dataset = TFRecordDataset([str(image_sets_file)])
         if shuffle:
-            self.dataset.shuffle(buffer_size=buffer_size)
+            self.dataset = self.dataset.shuffle(buffer_size=buffer_size)
         self.dataset = self.dataset.map(self.parse_sample)
         self.keep_difficult = keep_difficult
         self.num_batches = self.num_records // self.batch_size
