@@ -256,10 +256,9 @@ if __name__ == '__main__':
             )}
         ]
     elif args.freeze_net:
-        freeze_net_layers(net.base_net)
-        freeze_net_layers(net.source_layer_add_ons)
-        freeze_net_layers(net.extras)
-        params = itertools.chain(net.regression_headers.parameters(), net.classification_headers.parameters())
+        for layer in net.ssd.layers:
+            if layer not in net.regression_headers and layer not in net.classification_headers:
+                layer.trainable = False
         logging.info("Freeze all the layers except prediction heads.")
 
     """
@@ -316,7 +315,7 @@ if __name__ == '__main__':
         save_best_only=True,
         save_weights_only=False,
         mode='auto',
-        period=2)
+        period=1)
     early_stopper = tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5,
                                                      verbose=0,
                                                      mode='auto', baseline=None,
@@ -348,6 +347,6 @@ if __name__ == '__main__':
                           steps_per_epoch=len(datasets),
                           epochs=args.num_epochs, verbose=1,
                           callbacks=callbacks, validation_data=val_dataset,
-                          validation_steps=len(val_dataset), validation_freq=2,
+                          validation_steps=len(val_dataset), validation_freq=1,
                           initial_epoch=last_epoch, use_multiprocessing=False,
                           workers=args.num_workers, max_queue_size=args.max_queue_size)

@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw
 
 def main():
     CONFIGS = {
-        'max_num_samples': 3,
+        'max_num_samples': 2,
         'dataset_path': r'C:\Users\idenc\Downloads\superheroes',
         'collage_save_path': r"C:\Users\idenc\Documents\collages",
         'collage_record_save_path': r"C:\Users\idenc\Documents\superhero_singles",
@@ -155,7 +155,7 @@ def main():
         background_paths = [os.path.join(CONFIGS['collage_background_path'], f)
                             for f in os.listdir(CONFIGS['collage_background_path'])]
         for path in background_paths:
-            backgrounds.append(Image.open(path))
+            backgrounds.append(Image.open(path).convert("RGB"))
 
     # Collage Definition
     class SquareCollage:
@@ -317,13 +317,16 @@ def main():
                         if r <= operation.probability:
                             image_to_paste = operation.perform_operation([image_to_paste])[0]
 
-                    image_to_paste = Image.fromarray(noisy('poisson', image_to_paste))
+                    # image_to_paste = Image.fromarray(noisy('poisson', image_to_paste))
                     # determine position of image within collage
                     x = random.randint(0, max(collage.width - image_to_paste.width, 1))
                     y = random.randint(0, max(collage.height - image_to_paste.height, 1))
 
-                    # determine sample's bounding box
-                    bounding_box = [x, y, x + image_to_paste.width, y + image_to_paste.height]
+                    # determine sample's bounding box and ensure bounding box is not outside image
+                    # coords have format [min_x, min_y, max_x, max_y]
+                    bounding_box = [x, y,
+                                    min(x + image_to_paste.width, collage.width),
+                                    min(y + image_to_paste.height, collage.height)]
                     # paste image onto collage
                     collage.paste(image_to_paste, (x, y), mask=image_to_paste)
 
@@ -443,11 +446,13 @@ def main():
         collage = SquareCollage(CONFIGS)
 
         if t < train_count:
-            print("processing train set annotations " + str(t + 1) + " of " + str(train_count))
+            if t % 500 == 0:
+                print("processing train set annotations " + str(t + 1) + " of " + str(train_count))
             filename = "aug_train_" + str(t) + ".jpg"
             writer = train_writer
         else:
-            print("processing val set annotations " + str(t - train_count + 1) + " of " + str(val_count))
+            if t % 500 == 0:
+                print("processing val set annotations " + str(t - train_count + 1) + " of " + str(val_count))
             filename = "aug_val_" + str(t) + ".jpg"
             writer = val_writer
 
