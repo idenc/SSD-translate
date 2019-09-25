@@ -1,4 +1,5 @@
 import io
+import math
 import os
 import random
 
@@ -14,9 +15,11 @@ def main():
         'max_num_samples': 2,
         'dataset_path': r'C:\Users\idenc\Downloads\superheroes',
         'collage_save_path': r"C:\Users\idenc\Documents\collages",
-        'collage_record_save_path': r"C:\Users\idenc\Documents\superhero_singles",
+        'collage_record_save_path': r"C:\Users\idenc\Documents\super_new",
+        'save_to_jpg': False,
         'collage_count': 20000,
         'train_split': 0.9,
+        'shard_size': 500,
         'augmentation_settings': {
             'rotate': {
                 'probability': 0.5,
@@ -137,6 +140,8 @@ def main():
     assert os.path.exists(dataset_path), "ERROR: dataset path is invalid."
     classes = [cls for cls in os.listdir(dataset_path) if not cls.startswith('.')]
     assert (classes is not None) or (len(classes) != 0), "ERROR: empty dataset directory."
+    # Sort to ensure labels are in the same order every time data is generated
+    classes.sort()
 
     # create a list of images in each class directory
     for cls in classes:
@@ -381,15 +386,10 @@ def main():
 
     # Create TF Example
 
-    def create_tf_example(annotation, dataset_root, class_label_map, img):
+    def create_tf_example(annotation, class_label_map, img):
         # load image data
         filename = annotation['filename'].encode('utf8')
         image_format = b'jpg'
-
-        # with tf.io.gfile.GFile(os.path.join(dataset_root, annotation['filename']), 'rb') as fid:
-        #     encoded_jpg = fid.read()
-        #
-        # encoded_jpg_io = io.BytesIO(encoded_jpg)
 
         output = io.BytesIO()
         img.save(output, format='JPEG')
@@ -442,14 +442,14 @@ def main():
                 line = "item {\n    id: " + str(label_map[label]) + "\n    name: '" + label + "'\n}\n"
                 f.write(line)
 
-    def gen_collages(t, train_count, val_count, train_writer, val_writer, class_label_map):
+    def gen_collages(t, train_count, val_count, train_writers, val_writer, class_label_map):
         collage = SquareCollage(CONFIGS)
 
         if t < train_count:
-            if t % 500 == 0:
+            if (t + 1) % 500 == 0:
                 print("processing train set annotations " + str(t + 1) + " of " + str(train_count))
             filename = "aug_train_" + str(t) + ".jpg"
-            writer = train_writer
+            writer = train_writers[t // CONFIGS['shard_size']]
         else:
             if t % 500 == 0:
                 print("processing val set annotations " + str(t - train_count + 1) + " of " + str(val_count))
@@ -457,13 +457,13 @@ def main():
             writer = val_writer
 
         # save collage as JPEG image
-        # image_save_path = os.path.join(CONFIGS['collage_save_path'], filename)
-        # collage.collage.save(image_save_path, "JPEG")
+        if CONFIGS['save_to_jpg']:
+            image_save_path = os.path.join(CONFIGS['collage_save_path'], filename)
+            collage.collage.save(image_save_path, "JPEG")
 
         # create a TF example using image + annotation data
         annotation = create_annotation(collage, filename)
-        val_tf_example = create_tf_example(annotation, CONFIGS['collage_save_path'], class_label_map,
-                                           collage.collage)
+        val_tf_example = create_tf_example(annotation, class_label_map, collage.collage)
 
         # write serialized TF example
         writer.write(val_tf_example.SerializeToString())
@@ -483,7 +483,13 @@ def main():
         class_label_map = {}
 
         # create train & val set writers
-        train_writer = tf.io.TFRecordWriter(os.path.join(CONFIGS['collage_record_save_path'], "train.record"))
+        base_path = os.path.join(CONFIGS['collage_record_save_path'], "train")
+        num_shards = math.ceil(CONFIGS['collage_count'] / CONFIGS['shard_size'])
+        tf_record_output_filenames = [
+            '{}-{:05d}-of-{:05d}.record'.format(base_path, idx, num_shards)
+            for idx in range(num_shards)
+        ]
+        train_writers = [tf.io.TFRecordWriter(file_name) for file_name in tf_record_output_filenames]
         val_writer = tf.io.TFRecordWriter(os.path.join(CONFIGS['collage_record_save_path'], "val.record"))
 
         for k in range(len(classes)):
@@ -493,7 +499,7 @@ def main():
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor() as executor:
             futures = [executor.submit(gen_collages,
-                                       t, train_count, val_count, train_writer, val_writer, class_label_map)
+                                       t, train_count, val_count, train_writers, val_writer, class_label_map)
                        for t in range(CONFIGS['collage_count'])]
             for future in futures:
                 future.result()

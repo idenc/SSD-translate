@@ -4,9 +4,9 @@ import pathlib
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.python import FixedLenFeature, VarLenFeature, parse_single_example
 from tensorflow.python.data import TFRecordDataset
 from tensorflow.python.keras.utils.data_utils import Sequence
-from tensorflow.python import FixedLenFeature, VarLenFeature, parse_single_example
 
 
 class RecordDataset(Sequence):
@@ -24,18 +24,18 @@ class RecordDataset(Sequence):
         self.transform = transform
         self.target_transform = target_transform
         if is_test:
-            image_sets_file = self.root / "val.record"
+            image_sets_files = [os.path.join(root, "val.record")]
             if os.path.isfile(self.root / "num_val.txt"):
                 with open(self.root / "num_val.txt", 'r') as f:
                     self.num_records = int(f.read())
         else:
-            image_sets_file = self.root / "train.record"
+            image_sets_files = []
+            for file_name in os.listdir(self.root):
+                if file_name.startswith('train') and file_name.endswith('.record'):
+                    image_sets_files.append(os.path.join(root, file_name))
             if os.path.isfile(self.root / "num_val.txt"):
                 with open(self.root / "num_train.txt", 'r') as f:
                     self.num_records = int(f.read())
-
-        if buffer_size is None:
-            buffer_size = self.num_records
 
         self.keys_to_features = {
             'image/encoded':
@@ -67,9 +67,10 @@ class RecordDataset(Sequence):
                 VarLenFeature(tf.int64),
         }
 
-        self.dataset = TFRecordDataset([str(image_sets_file)])
         if shuffle:
-            self.dataset = self.dataset.shuffle(buffer_size=buffer_size)
+            np.random.shuffle(image_sets_files)
+        self.dataset = TFRecordDataset(image_sets_files,
+                                       num_parallel_reads=3 if len(image_sets_files) > 1 else 1)
         self.dataset = self.dataset.map(self.parse_sample)
         self.keep_difficult = keep_difficult
         self.num_batches = self.num_records // self.batch_size
@@ -116,7 +117,7 @@ class RecordDataset(Sequence):
 
     def __getitem__(self, idx):
         inputs, target1, target2 = [], [], []
-        for sample in self.dataset.take(self.batch_size):
+        for sample in self.dataset.shuffle(500).take(self.batch_size):
             boxes, labels, is_difficult = self._get_annotation(sample)
             if not self.keep_difficult and is_difficult:
                 boxes = boxes[is_difficult == 0]

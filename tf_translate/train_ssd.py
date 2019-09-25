@@ -54,11 +54,11 @@ class PlotLosses(tf.keras.callbacks.Callback):
         val_mask = np.isfinite(self.val_losses.astype(np.double))
         self.i += 1
 
-        plt.plot(self.x, self.losses, label="loss")
+        plt.plot(self.x, self.losses, label="loss", marker='o')
         if np.any(val_mask):
-            plt.plot(self.x[val_mask], self.val_losses[val_mask], label="val_loss")
+            plt.plot(self.x[val_mask], self.val_losses[val_mask], label="val_loss", marker='o')
         else:
-            plt.plot(self.x, self.val_losses, label="val_loss")
+            plt.plot(self.x, self.val_losses, label="val_loss", marker='o')
         plt.ion()
         plt.legend()
         plt.show()
@@ -123,7 +123,7 @@ parser.add_argument('--batch_size', default=32, type=int,
                     help='Batch size for training')
 parser.add_argument('--num_epochs', default=120, type=int,
                     help='the number epochs')
-parser.add_argument('--num_workers', default=6, type=int,
+parser.add_argument('--num_workers', default=12, type=int,
                     help='Number of workers used in dataloading')
 parser.add_argument('--max_queue_size', default=10, type=int, help='Max number of batches to queue for training')
 parser.add_argument('--use_cuda', default=True, type=str2bool,
@@ -268,13 +268,12 @@ if __name__ == '__main__':
     if args.optimizer == 'SGD':
         optimizer = tf.keras.optimizers.SGD(lr=args.lr, momentum=args.momentum, decay=args.weight_decay)
     elif args.optimizer == 'Adam':
-        optimizer = tf.keras.optimizers.Adam()
+        optimizer = tf.keras.optimizers.Adam(lr=args.lr)
     elif args.optimizer == 'RAdam':
         os.environ['TF_KERAS'] = "1"
         from keras_radam import RAdam
 
-        optimizer = RAdam(min_lr=1e-5,
-                          total_steps=math.ceil(args.num_epochs / args.batch_size) * args.num_epochs,
+        optimizer = RAdam(total_steps=len(datasets) * args.num_epochs,
                           weight_decay=args.weight_decay)
     else:
         logging.critical(f"Specified optimizer {args.optimizer} is unknown. Choose one of: SGD, Adam, RAdam")
