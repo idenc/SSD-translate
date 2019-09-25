@@ -1,5 +1,4 @@
 import argparse
-import itertools
 import logging
 import math
 import os
@@ -103,13 +102,9 @@ parser.add_argument('--lr_scheduler', default='SGDR', choices=[None, 'SGDR'],
 parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float,
                     help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float,
-                    help='Momentum value for optim')
+                    help='Momentum value for optimizer')
 parser.add_argument('--weight_decay', default=5e-4, type=float,
                     help='Weight decay for SGD')
-parser.add_argument('--base_net_lr', default=None, type=float,
-                    help='initial learning rate for base net.')
-parser.add_argument('--extra_layers_lr', default=None, type=float,
-                    help='initial learning rate for the layers not in base net and prediction heads.')
 
 # Params for loading pretrained basenet or checkpoints.
 parser.add_argument('--base_net',
@@ -238,22 +233,9 @@ if __name__ == '__main__':
     logging.info(f'Took {timer.end("Create Model"):.2f} seconds to create the model.')
     last_epoch = 0
 
-    base_net_lr = args.base_net_lr if args.base_net_lr is not None else args.lr
-    extra_layers_lr = args.extra_layers_lr if args.extra_layers_lr is not None else args.lr
     if args.freeze_base_net:
         logging.info("Freeze base net.")
-        # params = itertools.chain(net.source_layer_add_ons.parameters(), net.extras.parameters(),
-        #                          net.regression_headers.parameters(), net.classification_headers.parameters())
-        params = [
-            {'params': itertools.chain(
-                net.source_layer_add_ons.parameters(),
-                net.extras.parameters()
-            ), 'lr': extra_layers_lr},
-            {'params': itertools.chain(
-                net.regression_headers.parameters(),
-                net.classification_headers.parameters()
-            )}
-        ]
+        net.base_net.trainable = False
     elif args.freeze_net:
         for layer in net.ssd.layers:
             if layer not in net.regression_headers and layer not in net.classification_headers:
@@ -322,13 +304,12 @@ if __name__ == '__main__':
     plot = PlotLosses()
     if args.lr_scheduler == 'SGDR' and args.optimizer == 'SGD':
         lr_scheduler = SGDRScheduler(min_lr=1e-5, max_lr=1e-2,
-                                     steps_per_epoch=math.ceil(args.num_epochs / args.batch_size))
+                                     steps_per_epoch=len(datasets))
     callbacks.append(model_checkpoint)
     callbacks.append(early_stopper)
     callbacks.append(plot)
 
-    logging.info(f"Learning rate: {args.lr}, Base net learning rate: {base_net_lr}, "
-                 + f"Extra Layers learning rate: {extra_layers_lr}.")
+    logging.info(f"Learning rate: {args.lr}")
 
     # To test loss function
     # tf.keras.backend.set_learning_phase(0)
