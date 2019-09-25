@@ -12,7 +12,7 @@ from tensorflow.python.keras.utils.data_utils import Sequence
 class RecordDataset(Sequence):
 
     def __init__(self, root, transform=None, target_transform=None, is_test=False, keep_difficult=False,
-                 batch_size=32, buffer_size=None, shuffle=True):
+                 batch_size=32, shuffle=True):
         """
         Dataset for TFRecord data.
         Args:
@@ -28,6 +28,7 @@ class RecordDataset(Sequence):
             if os.path.isfile(self.root / "num_val.txt"):
                 with open(self.root / "num_val.txt", 'r') as f:
                     self.num_records = int(f.read())
+            self.ids = [i for i in range(self.num_records)]
         else:
             image_sets_files = []
             for file_name in os.listdir(self.root):
@@ -141,6 +142,10 @@ class RecordDataset(Sequence):
     def __len__(self):
         return int(np.ceil(self.num_records / float(self.batch_size)))
 
+    def get_annotation(self, idx):
+        for sample in self.dataset.skip(idx).take(1):
+            return sample['image/source_id'].numpy().decode('utf-8'), self._get_annotation(sample)
+
     def _get_annotation(self, sample):
         # Get info about each object in image
         num_objects = sample['image/object/bbox/xmax'].shape[0]
@@ -166,6 +171,10 @@ class RecordDataset(Sequence):
 
     def _read_image(self, sample):
         return tf.image.decode_image(sample['image/encoded']).numpy()
+
+    def get_image(self, idx):
+        for sample in self.dataset.take(1):
+            return tf.image.decode_image(sample['image/encoded']).numpy()
 
     def parse_sample(self, data_record):
         sample = parse_single_example(data_record, self.keys_to_features)

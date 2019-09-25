@@ -212,7 +212,8 @@ if __name__ == '__main__':
     logging.info("Prepare Validation dataset.")
     if args.dataset_type == "voc":
         val_dataset = VOCDataset(args.validation_dataset, transform=test_transform,
-                                 target_transform=target_transform, is_test=True, batch_size=args.batch_size)
+                                 target_transform=target_transform, is_test=True,
+                                 batch_size=args.batch_size, shuffle=False)
     elif args.dataset_type == 'open_images':
         val_dataset = OpenImagesDataset(dataset_path,
                                         transform=test_transform, target_transform=target_transform,
@@ -221,7 +222,11 @@ if __name__ == '__main__':
     elif args.dataset_type == 'tfrecord':
         val_dataset = RecordDataset(args.validation_dataset, transform=test_transform,
                                     target_transform=target_transform,
-                                    is_test=True, batch_size=args.batch_size)
+                                    is_test=True, batch_size=args.batch_size,
+                                    shuffle=False)
+    else:
+        logging.critical("Dataset type is unsupported. Choose on of voc, open_images, or tfrecord")
+        raise SystemExit(-1)
     logging.info("validation dataset size: {}".format(val_dataset.num_records))
 
     """
