@@ -4,7 +4,7 @@ import cv2
 from vision.ssd.predictor import Predictor
 from vision.ssd.config import mobilenetv1_ssd_config as config
 from WebcamCapture import WebcamVideoStream
-from deepviewrt.context import Context
+import deepviewrt as rt
 
 from vision.utils.misc import Timer
 
@@ -12,24 +12,32 @@ if len(sys.argv) < 3:
     print('Usage: python run_ssd_example.py <model path>')
     sys.exit(0)
 
-model_path = sys.argv[1]
-label_path = sys.argv[2]
+net_type = sys.argv[1]
+model_path = sys.argv[2]
+label_path = sys.argv[3]
 
 if len(sys.argv) >= 5:
     cap = cv2.VideoCapture(sys.argv[4])  # capture from file
 else:
-    cap = cv2.VideoCapture(0)  # capture from camera
+    # cap = cv2.VideoCapture('http://192.168.1.65:8080/videofeed')  # capture from camera
+    cap = cv2.VideoCapture(0)
     cap.set(3, 480)
     cap.set(4, 480)
 
 class_names = [name.strip() for name in open(label_path).readlines()]
 num_classes = len(class_names)
 
-client = Context()
+print(rt.version())
+client = rt.Context()
 in_file = open(model_path, 'rb')
 client.load(in_file.read())
 
-predictor = Predictor(client, config.image_size, config=config)
+predictor = Predictor(client,
+                      nms_method=None,
+                      iou_threshold=config.iou_threshold,
+                      candidate_size=200,
+                      sigma=0.5,
+                      config=config)
 
 cap = WebcamVideoStream(cap).start()
 

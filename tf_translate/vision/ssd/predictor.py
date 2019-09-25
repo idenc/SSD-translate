@@ -2,22 +2,22 @@ import numpy as np
 import tensorflow as tf
 
 from .data_preprocessing import PredictionTransform
-from ..utils import box_utils
+# from ..utils import box_utils
 from ..utils.misc import Timer
-from vision.utils.box_utils_numpy import convert_locations_to_boxes, center_form_to_corner_form
+from vision.utils.box_utils_numpy import convert_locations_to_boxes, center_form_to_corner_form, hard_nms
 
 
 class Predictor:
-    def __init__(self, net, size, mean=0.0, std=1.0, nms_method=None,
+    def __init__(self, net, nms_method=None,
                  iou_threshold=0.45, filter_threshold=0.01, candidate_size=200, sigma=0.5, config=None):
         self.net = net
-        self.transform = PredictionTransform(size, mean, std)
+        self.transform = PredictionTransform(config.image_size, config.image_mean, config.image_std)
         self.iou_threshold = iou_threshold
         self.filter_threshold = filter_threshold
         self.candidate_size = candidate_size
         self.nms_method = nms_method
-        self.config = config
         self.priors = config.priors
+        self.config = config
 
         self.sigma = sigma
 
@@ -55,18 +55,16 @@ class Predictor:
                 continue
             subset_boxes = boxes[mask, :]
             box_probs = tf.concat([subset_boxes, probs.reshape(-1, 1)], axis=1)
-            box_probs = box_utils.nms(box_probs, self.nms_method,
-                                      score_threshold=prob_threshold,
-                                      iou_threshold=self.iou_threshold,
-                                      sigma=self.sigma,
-                                      top_k=top_k,
-                                      candidate_size=self.candidate_size)
+            box_probs = hard_nms(box_probs.numpy(),
+                                 iou_threshold=self.iou_threshold,
+                                 top_k=top_k,
+                                 candidate_size=self.candidate_size)
             picked_box_probs.append(box_probs)
             picked_labels.extend([class_index] * box_probs.shape[0])
 
         if not picked_box_probs:
             return tf.constant([], dtype=tf.float32), tf.constant([], dtype=tf.float32), tf.constant([],
-                                                                                                     dtype=tf.float32)
+                                                                                            dtype=tf.float32)
         picked_box_probs_temp = tf.concat(picked_box_probs, axis=0)
         picked_box_probs = [picked_box_probs_temp[:, 0] * width, picked_box_probs_temp[:, 1] * height,
                             picked_box_probs_temp[:, 2] * width, picked_box_probs_temp[:, 3] * height,
