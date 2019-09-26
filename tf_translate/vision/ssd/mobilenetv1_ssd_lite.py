@@ -34,20 +34,20 @@ def create_mobilenetv1_ssd_lite(num_classes, is_test=False):
     ]
 
     regression_headers = [
-        SeparableConv2D(filters=6 * 4, kernel_size=3, padding="same"),
-        SeparableConv2D(filters=6 * 4, kernel_size=3, padding="same"),
-        SeparableConv2D(filters=6 * 4, kernel_size=3, padding="same"),
-        SeparableConv2D(filters=6 * 4, kernel_size=3, padding="same"),
-        SeparableConv2D(filters=6 * 4, kernel_size=3, padding="same"),
+        SeparableConv2D(filters=6 * 4, kernel_size=3, padding="same", activation='relu'),
+        SeparableConv2D(filters=6 * 4, kernel_size=3, padding="same", activation='relu'),
+        SeparableConv2D(filters=6 * 4, kernel_size=3, padding="same", activation='relu'),
+        SeparableConv2D(filters=6 * 4, kernel_size=3, padding="same", activation='relu'),
+        SeparableConv2D(filters=6 * 4, kernel_size=3, padding="same", activation='relu'),
         Conv2D(filters=6 * 4, kernel_size=1),
     ]
 
     classification_headers = [
-        SeparableConv2D(filters=6 * num_classes, kernel_size=3, padding="same"),
-        SeparableConv2D(filters=6 * num_classes, kernel_size=3, padding="same"),
-        SeparableConv2D(filters=6 * num_classes, kernel_size=3, padding="same"),
-        SeparableConv2D(filters=6 * num_classes, kernel_size=3, padding="same"),
-        SeparableConv2D(filters=6 * num_classes, kernel_size=3, padding="same"),
+        SeparableConv2D(filters=6 * num_classes, kernel_size=3, padding="same", activation='relu'),
+        SeparableConv2D(filters=6 * num_classes, kernel_size=3, padding="same", activation='relu'),
+        SeparableConv2D(filters=6 * num_classes, kernel_size=3, padding="same", activation='relu'),
+        SeparableConv2D(filters=6 * num_classes, kernel_size=3, padding="same", activation='relu'),
+        SeparableConv2D(filters=6 * num_classes, kernel_size=3, padding="same", activation='relu'),
         Conv2D(filters=6 * num_classes, kernel_size=1),
     ]
 
