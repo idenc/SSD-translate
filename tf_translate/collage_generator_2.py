@@ -5,31 +5,36 @@ import random
 
 import Augmentor
 import matplotlib.pyplot as plt
-import numpy as np
 import tensorflow as tf
 from PIL import Image, ImageDraw
 
 
 def main():
     CONFIGS = {
+        # Maximum number of masked image to paste over background
         'max_num_samples': 2,
+        # Path to masked images
         'dataset_path': r'C:\Users\idenc\Downloads\superheroes',
+        # Path to save JPEG images to, only applies if save_to_jpg is True
         'collage_save_path': r"C:\Users\idenc\Documents\collages",
+        # Path to save collage TFRecord files to
         'collage_record_save_path': r"C:\Users\idenc\Documents\super_new",
+        # Whether to save JPG images of each generated collage
         'save_to_jpg': False,
+        # Number of collages to generate
         'collage_count': 20000,
+        # Train-validation split ratio
         'train_split': 0.9,
+        # How many collages to save in a single TFRecord file
+        # This is to enable true shuffling during training as TFRecord files are sequential
         'shard_size': 500,
+        # Settings for augmentor library augmentations to apply to masked images
+        # Set probability to 0 to disable the augmentation
         'augmentation_settings': {
             'rotate': {
                 'probability': 0.5,
                 'max_left_rotation': 10,
                 'max_right_rotation': 10,
-            },
-            'zoom': {
-                'probability': 0.5,
-                'min_factor': 0.5,
-                'max_factor': 1.0,
             },
             'flip_left_right': {
                 'probability': 0.5,
@@ -43,52 +48,33 @@ def main():
                 'grid_height': 3,
                 'magnitude': 8
             },
+            'rotate_random_90': {
+                'probability': 0.5
+            },
+            'skew': {
+                'probability': 0.5
+            },
+            'random_contrast': {
+                'probability': 0.4,
+                'min_factor': 0.3,
+                'max_factor': 3.0
+            },
+            'random_brightness': {
+                'probability': 0.4,
+                'min_factor': 0.3,
+                'max_factor': 3.0
+            }
         },
+        'num_workers': 12,  # Number of threads to use when generating images
+        # Probability to exclude sample from collage
+        # A single collage will always have at least one sample
         'mask_probability': 0.4,
         'collage_background_type': 'img',  # `img` for background images, `solid` for solid colour background
+        # Path to background images to use
         'collage_background_path': r"C:\Users\idenc\Downloads\VOCdevkit\VOC2008\JPEGImages",
         # Random samples from background directory
         'collage_background_colour': (255, 255, 255)
     }
-
-    def noisy(noise_typ, image):
-        if noise_typ == "gauss":
-            col, row = image.size
-            ch = 4
-            mean = 0
-            var = 0.1
-            sigma = var ** 0.5
-            gauss = np.random.normal(mean, sigma, (row, col, ch))
-            gauss = gauss.reshape(row, col, ch)
-            noisy = image + gauss
-            return noisy.astype(np.uint8)
-        elif noise_typ == "s&p":
-            s_vs_p = 0.5
-            amount = 0.004
-            out = np.copy(image)
-            # Salt mode
-            num_salt = np.ceil(amount * image.size * s_vs_p)
-            coords = [np.random.randint(0, i - 1, int(num_salt))
-                      for i in image.shape]
-            out[coords] = 1
-
-            # Pepper mode
-            num_pepper = np.ceil(amount * image.size * (1. - s_vs_p))
-            coords = [np.random.randint(0, i - 1, int(num_pepper))
-                      for i in image.shape]
-            out[coords] = 0
-            return out
-        elif noise_typ == "poisson":
-            vals = len(np.unique(image))
-            vals = 2 ** np.ceil(np.log2(vals))
-            noisy = np.random.poisson(image * vals) / float(vals)
-            return noisy.astype(np.uint8)
-        elif noise_typ == "speckle":
-            row, col, ch = image.shape
-            gauss = np.random.randn(row, col, ch)
-            gauss = gauss.reshape(row, col, ch)
-            noisy = image + image * gauss
-            return noisy
 
     class Sample:
         """
@@ -286,17 +272,20 @@ def main():
 
             augmentation_settings = self.CONFIGS['augmentation_settings']
             self.pipeline.rotate_without_crop(**augmentation_settings['rotate'])
-            # self.pipeline.zoom(**augmentation_settings['zoom']) # Zoom breaks bounding box generation
             self.pipeline.random_distortion(**augmentation_settings['random_distortion'])
             self.pipeline.flip_left_right(**augmentation_settings['flip_left_right'])
             self.pipeline.flip_top_bottom(**augmentation_settings['flip_top_bottom'])
-            self.pipeline.rotate_random_90(probability=0.3)
-            # self.pipeline.crop_random(probability=0.25, percentage_area=0.97)
-            self.pipeline.skew(probability=0.5)
-            self.pipeline.random_contrast(probability=0.4, min_factor=0.3, max_factor=3.0)
-            self.pipeline.random_brightness(probability=0.4, min_factor=0.3, max_factor=3.0)
+            self.pipeline.rotate_random_90(**augmentation_settings['rotate_random_90'])
+            self.pipeline.skew(**augmentation_settings['skew'])
+            self.pipeline.random_contrast(**augmentation_settings['random_contrast'])
+            self.pipeline.random_brightness(**augmentation_settings['random_brightness'])
 
         def __paste_image(self, collage):
+            """
+            Pastes masked images onto background with augmentations
+            :param collage:
+            :return:
+            """
             bounding_boxes, labels = [], []
             max_num_samples = self.CONFIGS['max_num_samples']
 
@@ -342,14 +331,13 @@ def main():
             return bounding_boxes, labels
 
         def __create_collage(self):
-
             """
-                Creates a square collage using the augmented samples and mask generated prior to
-                this method call and saves corresponding bounding boxes and labels in order.
+            Creates a square collage using the augmented samples and mask generated prior to
+            this method call and saves corresponding bounding boxes and labels in order.
 
-                Parameters/Returns
-                ------------------
-                None
+            Parameters/Returns
+            ------------------
+            None
 
             """
             # create an empty collage image
@@ -370,6 +358,11 @@ def main():
         ###################### PUBLIC METHODS ######################
 
         def display(self, display_bounding_boxes=False):
+            """
+            Draws collage with option to display bounding boxes
+            :param display_bounding_boxes: Whether to display bounding boxes
+            :return:
+            """
             if display_bounding_boxes:
                 draw = ImageDraw.Draw(self.collage)
                 for box in self.bounding_boxes:
@@ -387,6 +380,13 @@ def main():
     # Create TF Example
 
     def create_tf_example(annotation, class_label_map, img):
+        """
+        Creates tf example to be written to TFRecord
+        :param annotation: sample annotation data
+        :param class_label_map: class label dictionary
+        :param img: collage image
+        :return: a TF example containing sample data
+        """
         # load image data
         filename = annotation['filename'].encode('utf8')
         image_format = b'jpg'
@@ -427,6 +427,12 @@ def main():
         return tf_example
 
     def create_annotation(collage, filename):
+        """
+        Creates annotation to write to TFRecord file
+        :param collage: Data point
+        :param filename: Filename of data point
+        :return:
+        """
         annotation = {'filename': filename, 'width': collage.collage.size[0], 'height': collage.collage.size[1],
                       'boxes': []}
 
@@ -437,12 +443,28 @@ def main():
         return annotation
 
     def save_label_map(label_map, output_path):
+        """
+        Saves class labels in TFRecord format
+        :param label_map: Label map dictionary
+        :param output_path: Path to write label_map.txt
+        :return:
+        """
         with open(os.path.join(output_path, "label_map.txt"), "w") as f:
             for label in list(label_map.keys()):
                 line = "item {\n    id: " + str(label_map[label]) + "\n    name: '" + label + "'\n}\n"
                 f.write(line)
 
     def gen_collages(t, train_count, val_count, train_writers, val_writer, class_label_map):
+        """
+        Function to generate collages and write to TFRecord/JPEG
+        Function is called in parallel to speed up generation
+        :param t: Index of collage
+        :param train_count: Size of training set
+        :param val_count: Size of validation set
+        :param train_writers: TFRecord writers for train set
+        :param val_writer: TFRecord writers for validation set
+        :param class_label_map: List containing class labels
+        """
         collage = SquareCollage(CONFIGS)
 
         if t < train_count:
@@ -468,7 +490,11 @@ def main():
         # write serialized TF example
         writer.write(val_tf_example.SerializeToString())
 
-    def create_collages(CONFIGS):
+    def create_collages():
+        """
+        Entry point to generate collage
+        :return:
+        """
         # create save directories
         os.makedirs(CONFIGS['collage_save_path'], exist_ok=True)
         os.makedirs(CONFIGS['collage_record_save_path'], exist_ok=True)
@@ -497,7 +523,7 @@ def main():
 
         save_label_map(class_label_map, CONFIGS['collage_record_save_path'])
         from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor() as executor:
+        with ThreadPoolExecutor(CONFIGS['num_workers']) as executor:
             futures = [executor.submit(gen_collages,
                                        t, train_count, val_count, train_writers, val_writer, class_label_map)
                        for t in range(CONFIGS['collage_count'])]
@@ -505,7 +531,7 @@ def main():
                 future.result()
 
     # Finally create all collages
-    create_collages(CONFIGS)
+    create_collages()
 
 
 if __name__ == '__main__':
