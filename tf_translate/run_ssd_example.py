@@ -94,7 +94,7 @@ else:
 
     for i in range(boxes.shape[0]):
         box = boxes[i, :]
-        cv2.rectangle(orig_image, (box[0], box[1]), (box[2], box[3]), (255, 255, 0), 4)
+        cv2.rectangle(orig_image, (box[1], box[0]), (box[3], box[2]), (255, 255, 0), 4)
         # label = f"""{voc_dataset.class_names[labels[i]]}: {probs[i]:.2f}"""
         label = f"{class_names[labels[i]]}: {probs[i]:.2f}"
         cv2.putText(orig_image, label,

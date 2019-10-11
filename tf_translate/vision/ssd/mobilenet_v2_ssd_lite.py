@@ -9,7 +9,7 @@ from .predictor import Predictor
 from .ssd import SSD, GraphPath
 
 
-def create_mobilenetv2_ssd_lite(num_classes, width_mult=1.0, is_test=False):
+def create_mobilenetv2_ssd_lite(num_classes, width_mult=1.0, is_test=False, is_train=False):
     base_net = MobileNetV2(input_shape=(config.image_size, config.image_size, 3),
                            include_top=False, alpha=width_mult, weights=None)
 
@@ -40,25 +40,25 @@ def create_mobilenetv2_ssd_lite(num_classes, width_mult=1.0, is_test=False):
     ]
 
     classification_headers = [
-        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3),
-        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3),
-        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3),
-        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3),
-        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3),
-        Conv2D(filters=6 * num_classes, kernel_size=1, padding='valid'),
+        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, name='conv_extra_1_' + str(6 * num_classes)),
+        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, name='conv_extra_2_' + str(6 * num_classes)),
+        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, name='conv_extra_3_' + str(6 * num_classes)),
+        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, name='conv_extra_4_' + str(6 * num_classes)),
+        SeparableConv2D_with_batchnorm(filters=6 * num_classes, kernel_size=3, name='conv_extra_5_' + str(6 * num_classes)),
+        Conv2D(filters=6 * num_classes, kernel_size=1, padding='valid', name='conv_extra_6_' + str(6 * num_classes)),
     ]
 
     return SSD(num_classes, base_net, source_layer_indexes,
-               extras, classification_headers, regression_headers, is_test=is_test, config=config)
+               extras, classification_headers, regression_headers, is_test=is_test, config=config, is_train=is_train)
 
 
-def SeparableConv2D_with_batchnorm(filters, kernel_size):
+def SeparableConv2D_with_batchnorm(filters, kernel_size, name=None):
     return Sequential([
         DepthwiseConv2D(kernel_size=kernel_size, padding='same'),
         BatchNormalizationV2(epsilon=1e-5, momentum=0.999),
         ReLU(max_value=6.),
         Conv2D(filters=filters, kernel_size=1, padding='valid')
-    ])
+    ], name=name)
 
 
 def create_mobilenetv2_ssd_lite_predictor(net, candidate_size=200, nms_method=None, sigma=0.5):

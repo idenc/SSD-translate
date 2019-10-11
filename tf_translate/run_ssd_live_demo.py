@@ -1,7 +1,8 @@
 import sys
 
 import cv2
-
+import os
+os.environ["CUDA_VISIBLE_DEVICES"]="-1"
 from vision.ssd.mobilenet_v2_ssd_lite import create_mobilenetv2_ssd_lite, create_mobilenetv2_ssd_lite_predictor
 from vision.ssd.mobilenetv1_ssd import create_mobilenetv1_ssd, create_mobilenetv1_ssd_predictor
 from vision.ssd.mobilenetv1_ssd_lite import create_mobilenetv1_ssd_lite, create_mobilenetv1_ssd_lite_predictor
@@ -20,7 +21,7 @@ label_path = sys.argv[3]
 if len(sys.argv) >= 5:
     cap = cv2.VideoCapture(sys.argv[4])  # capture from file
 else:
-    cap = cv2.VideoCapture('http://10.10.40.185:8080/videofeed')  # capture from camera
+    cap = cv2.VideoCapture('http://192.168.1.69:8080/videofeed')  # capture from camera
     cap.set(3, 1920)
     cap.set(4, 1080)
 
@@ -40,7 +41,7 @@ elif net_type == 'sq-ssd-lite':
 else:
     print("The net type is wrong. It should be one of vgg16-ssd, mb1-ssd and mb1-ssd-lite.")
     sys.exit(1)
-net.ssd.load_weights(model_path)
+net.ssd.load_weights(model_path, by_name=True)
 
 if net_type == 'vgg16-ssd':
     predictor = create_vgg_ssd_predictor(net, candidate_size=200)
@@ -65,7 +66,7 @@ while True:
         continue
     image = cv2.cvtColor(orig_image, cv2.COLOR_BGR2RGB)
     timer.start()
-    boxes, labels, probs = predictor.predict(image, 10, 0.4)
+    boxes, labels, probs = predictor.predict(image, 10, 0.6)
     interval = timer.end()
     print('Time: {:.2f}s, Detect Objects: {:d}.'.format(interval, labels.shape[0]))
     for i in range(boxes.shape[0]):

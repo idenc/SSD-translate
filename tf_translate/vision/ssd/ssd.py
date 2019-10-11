@@ -1,9 +1,9 @@
 from collections import namedtuple
 from typing import List
 
-from tensorflow.python.keras.models import Model, load_model
+from tensorflow.python.keras.models import Model, load_model, Sequential
 from tensorflow.python.keras.layers import Concatenate, Add, Reshape, Softmax
-from tensorflow.python.keras.initializers import glorot_uniform, Zeros
+from tensorflow.python.keras.initializers import glorot_uniform, Zeros, Ones
 from ..utils import box_utils
 
 GraphPath = namedtuple("GraphPath", ['s0', 's1'])  #
@@ -131,14 +131,32 @@ class SSD:
         self.ssd.load_weights(weights_path, by_name=True)
         for layer in self.ssd.layers:
             if layer in self.classification_headers or layer in self.regression_headers:
-                w = layer.get_weights()
-                if len(w) > 1:  # Layer has bias
-                    new_weights = []
-                    new_weights.append(glorot_uniform()(w[0].shape))
-                    new_weights.append(Zeros()(w[1].shape))
+                if type(layer) == Sequential:
+                    for sub_layer in layer.layers:
+                        w = sub_layer.get_weights()
+                        if w:
+                            if len(w) == 2:  # Layer has bias
+                                new_weights = []
+                                new_weights.append(glorot_uniform()(w[0].shape))
+                                new_weights.append(Zeros()(w[1].shape))
+                            elif len(w) == 4:
+                                new_weights = []
+                                new_weights.append(Ones()(w[0].shape))
+                                new_weights.append(Zeros()(w[1].shape))
+                                new_weights.append(Zeros()(w[2].shape))
+                                new_weights.append(Ones()(w[3].shape))
+                            else:
+                                new_weights = glorot_uniform()(w.shape)
+                            sub_layer.set_weights(new_weights)
                 else:
-                    new_weights = glorot_uniform()(w.shape)
-                layer.set_weights(new_weights)
+                    w = layer.get_weights()
+                    if len(w) > 1:  # Layer has bias
+                        new_weights = []
+                        new_weights.append(glorot_uniform()(w[0].shape))
+                        new_weights.append(Zeros()(w[1].shape))
+                    else:
+                        new_weights = glorot_uniform()(w.shape)
+                    layer.set_weights(new_weights)
 
 
 class MatchPrior(object):

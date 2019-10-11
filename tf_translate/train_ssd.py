@@ -155,7 +155,7 @@ if __name__ == '__main__':
         create_net = create_squeezenet_ssd_lite
         config = squeezenet_ssd_config
     elif args.net == 'mb2-ssd-lite':
-        create_net = lambda num: create_mobilenetv2_ssd_lite(num, width_mult=args.mb2_width_mult)
+        create_net = create_mobilenetv2_ssd_lite
         config = mobilenetv1_ssd_config
     else:
         logging.fatal("The net type is wrong.")
@@ -261,7 +261,7 @@ if __name__ == '__main__':
         from keras_radam import RAdam
 
         optimizer = RAdam(total_steps=len(datasets) * args.num_epochs,
-                          weight_decay=args.weight_decay)
+                          weight_decay=args.weight_decay, amsgrad=False)
     else:
         logging.critical(f"Specified optimizer {args.optimizer} is unknown. Choose one of: SGD, Adam, RAdam")
         raise SystemExit(-1)
