@@ -1,3 +1,4 @@
+import collections
 import io
 import math
 import os
@@ -12,17 +13,17 @@ from PIL import Image, ImageDraw
 def main():
     CONFIGS = {
         # Maximum number of masked image to paste over background
-        'max_num_samples': 2,
+        'max_num_samples': 3,
         # Path to masked images
-        'dataset_path': r'C:\Users\idenc\Downloads\superheroes',
+        'dataset_path': r'D:\Fruit-Images-Dataset-master\Fruit-Images-Dataset-master\Training',
         # Path to save JPEG images to, only applies if save_to_jpg is True
-        'collage_save_path': r"C:\Users\idenc\Documents\collages",
+        'collage_save_path': r"C:\Users\iden\Documents\collages",
         # Path to save collage TFRecord files to
-        'collage_record_save_path': r"C:\Users\idenc\Documents\super_new",
+        'collage_record_save_path': r"C:\Users\iden\Documents\test",
         # Whether to save JPG images of each generated collage
         'save_to_jpg': False,
         # Number of collages to generate
-        'collage_count': 20000,
+        'collage_count': 10,
         # Train-validation split ratio
         'train_split': 0.9,
         # How many collages to save in a single TFRecord file
@@ -71,7 +72,7 @@ def main():
         'mask_probability': 0.4,
         'collage_background_type': 'img',  # `img` for background images, `solid` for solid colour background
         # Path to background images to use
-        'collage_background_path': r"C:\Users\idenc\Downloads\VOCdevkit\VOC2008\JPEGImages",
+        'collage_background_path': r"D:\VOC_datasets\VOC2012\JPEGImages",
         # Random samples from background directory
         'collage_background_colour': (255, 255, 255)
     }
@@ -126,8 +127,6 @@ def main():
     assert os.path.exists(dataset_path), "ERROR: dataset path is invalid."
     classes = [cls for cls in os.listdir(dataset_path) if not cls.startswith('.')]
     assert (classes is not None) or (len(classes) != 0), "ERROR: empty dataset directory."
-    # Sort to ensure labels are in the same order every time data is generated
-    classes.sort()
 
     # create a list of images in each class directory
     for cls in classes:
@@ -136,7 +135,8 @@ def main():
             file_paths = [os.path.join(dataset_path, cls, file) for file in files]
             images = []
             for img_path in file_paths:
-                images.append((img_path, Image.open(img_path).convert("RGBA")))
+                # images.append((img_path, Image.open(img_path).convert("RGBA")))
+                images.append(img_path)
             dataset[cls] = images
         else:
             print("WARNING: class directory '" + cls + "' is empty -> skipping.")
@@ -146,7 +146,8 @@ def main():
         background_paths = [os.path.join(CONFIGS['collage_background_path'], f)
                             for f in os.listdir(CONFIGS['collage_background_path'])]
         for path in background_paths:
-            backgrounds.append(Image.open(path).convert("RGB"))
+            # backgrounds.append(Image.open(path).convert("RGB"))
+            backgrounds.append(path)
 
     # Collage Definition
     class SquareCollage:
@@ -242,12 +243,12 @@ def main():
                 random_class = random.choice(classes)
 
                 # randomly select an image from the class
-                random_image_path, random_image = random.choice(dataset[random_class])
+                random_image_path = random.choice(dataset[random_class])
 
                 # assert uniqueness then save as a Sample object
                 if random_image_path not in sample_paths:
                     sample_paths.append(random_image_path)
-                    sample = random_image.copy()
+                    sample = Image.open(random_image_path).convert("RGBA")
 
                     sample = Sample(random_image_path,
                                     random_class,
@@ -292,16 +293,17 @@ def main():
             # loop through all samples & mask, resize, and paste onto empty collage accordingly
             for i in range(max_num_samples):
                 # determine whether this tile is to be masked
-                show_tile = random.randint(0, 1)
+                show_tile = round(random.uniform(0, 1), 1)
 
-                if show_tile or (i == (max_num_samples - 1) and not bounding_boxes):
+                if show_tile <= self.CONFIGS['mask_probability'] or (i == (max_num_samples - 1) and not bounding_boxes):
                     # extract tile information
                     tile = self.original_samples[i]
                     image_to_paste = tile.image
-                    # ImageDraw.floodfill(image_to_paste, (10, 10), (255, 255, 255, 0), thresh=15)
+                    ImageDraw.floodfill(image_to_paste, (0, 0), (255, 255, 255, 0), thresh=90)
 
                     # resize image
                     scale = image_to_paste.width / image_to_paste.height
+                    # sample takes up minimum 30% of background image and maximum 90%
                     new_size = random.randint(int(collage.height * 0.3), int(collage.height * 0.9))
                     new_size = (int(new_size * scale), new_size)
                     image_to_paste = image_to_paste.resize(new_size, Image.ANTIALIAS)
@@ -342,7 +344,7 @@ def main():
             """
             # create an empty collage image
             if self.CONFIGS['collage_background_type'] == 'img':  # Use random image as background
-                collage = random.choice(backgrounds).copy()
+                collage = Image.open(random.choice(backgrounds))
             else:  # Use a default solid background
                 background_colour = self.CONFIGS['collage_background_colour']
                 collage = Image.new('RGB',
@@ -468,12 +470,12 @@ def main():
         collage = SquareCollage(CONFIGS)
 
         if t < train_count:
-            if (t + 1) % 500 == 0:
+            if (t + 1) % 200 == 0:
                 print("processing train set annotations " + str(t + 1) + " of " + str(train_count))
             filename = "aug_train_" + str(t) + ".jpg"
             writer = train_writers[t // CONFIGS['shard_size']]
         else:
-            if t % 500 == 0:
+            if (t + 1) % 200 == 0:
                 print("processing val set annotations " + str(t - train_count + 1) + " of " + str(val_count))
             filename = "aug_val_" + str(t) + ".jpg"
             writer = val_writer
@@ -506,11 +508,13 @@ def main():
         # create label map
         classes = [class_label for class_label in set(os.listdir(CONFIGS['dataset_path'])) if
                    not class_label.startswith('.')]
-        class_label_map = {}
+        # Sort to ensure labels are in the same order every time data is generated
+        classes.sort()
+        class_label_map = collections.OrderedDict()
 
         # create train & val set writers
         base_path = os.path.join(CONFIGS['collage_record_save_path'], "train")
-        num_shards = math.ceil(CONFIGS['collage_count'] / CONFIGS['shard_size'])
+        num_shards = math.ceil(train_count / CONFIGS['shard_size'])
         tf_record_output_filenames = [
             '{}-{:05d}-of-{:05d}.record'.format(base_path, idx, num_shards)
             for idx in range(num_shards)
