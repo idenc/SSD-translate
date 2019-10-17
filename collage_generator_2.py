@@ -3,6 +3,7 @@ import io
 import math
 import os
 import random
+from concurrent.futures import ThreadPoolExecutor
 
 import Augmentor
 import matplotlib.pyplot as plt
@@ -21,9 +22,9 @@ def main():
         # Path to save collage TFRecord files to
         'collage_record_save_path': r"C:\Users\iden\Documents\test",
         # Whether to save JPG images of each generated collage
-        'save_to_jpg': False,
+        'save_to_jpg': True,
         # Number of collages to generate
-        'collage_count': 10,
+        'collage_count': 100,
         # Train-validation split ratio
         'train_split': 0.9,
         # How many collages to save in a single TFRecord file
@@ -70,6 +71,8 @@ def main():
         # Probability to exclude sample from collage
         # A single collage will always have at least one sample
         'mask_probability': 0.4,
+        # Applies flood fill to each sample image to mask solid background out
+        'use_floodfill': True,
         'collage_background_type': 'img',  # `img` for background images, `solid` for solid colour background
         # Path to background images to use
         'collage_background_path': r"D:\VOC_datasets\VOC2012\JPEGImages",
@@ -290,22 +293,61 @@ def main():
             bounding_boxes, labels = [], []
             max_num_samples = self.CONFIGS['max_num_samples']
 
+            # Determine how many samples will be present in this image
+            show_tile = [False for _ in range(max_num_samples)]
+            num_shown_samples = 0
+            for i in range(max_num_samples):
+                mask_prob = round(random.uniform(0, 1), 1)
+                if mask_prob > self.CONFIGS['mask_probability']:
+                    show_tile[i] = True
+                    num_shown_samples += 1
+            if num_shown_samples == 0:
+                num_shown_samples = 1
+
+            # Divide up image into sections to avoid samples overlapping each other
+            # region_coords[i] consists of (xmin, ymin, xmax, ymax) for sample i
+            region_coords = []
+            if collage.height > collage.width:  # Image is taller than it is wide
+                region_height = collage.height // num_shown_samples
+                for i in range(num_shown_samples):
+                    region_coords.append((0, region_height * i, collage.width, region_height * (i + 1)))
+            else:  # Image is square or wider than it is tall
+                region_width = collage.width // num_shown_samples
+                for i in range(num_shown_samples):
+                    region_coords.append((region_width * i, 0, region_width * (i + 1), collage.height))
+
             # loop through all samples & mask, resize, and paste onto empty collage accordingly
             for i in range(max_num_samples):
                 # determine whether this tile is to be masked
-                show_tile = round(random.uniform(0, 1), 1)
-
-                if show_tile <= self.CONFIGS['mask_probability'] or (i == (max_num_samples - 1) and not bounding_boxes):
+                if show_tile[i] or (i == (max_num_samples - 1) and not bounding_boxes):
                     # extract tile information
                     tile = self.original_samples[i]
                     image_to_paste = tile.image
-                    ImageDraw.floodfill(image_to_paste, (0, 0), (255, 255, 255, 0), thresh=90)
+                    if self.CONFIGS['use_floodfill']:
+                        ImageDraw.floodfill(image_to_paste, (0, 0), (255, 255, 255, 0), thresh=90)
 
-                    # resize image
-                    scale = image_to_paste.width / image_to_paste.height
-                    # sample takes up minimum 30% of background image and maximum 90%
-                    new_size = random.randint(int(collage.height * 0.3), int(collage.height * 0.9))
-                    new_size = (int(new_size * scale), new_size)
+                    # Get region coords
+                    sample_coords = region_coords.pop(0)
+                    xmin = sample_coords[0]
+                    ymin = sample_coords[1]
+                    xmax = sample_coords[2]
+                    ymax = sample_coords[3]
+                    region_width = xmax - xmin
+                    region_height = ymax - ymin
+
+                    if region_width > region_height:
+                        # resize image
+                        scale = region_width / region_height
+                        # sample takes up minimum 30% of background image and maximum 95%
+                        new_size = random.randint(int(region_height * 0.3), int(region_height * 0.95))
+                        new_size = (int(new_size * scale), new_size)
+                    else:
+                        # resize image
+                        scale = region_height / region_width
+                        # sample takes up minimum 30% of background image and maximum 95%
+                        new_size = random.randint(int(region_width * 0.3), int(region_width * 0.95))
+                        new_size = (new_size, int(new_size * scale))
+
                     image_to_paste = image_to_paste.resize(new_size, Image.ANTIALIAS)
 
                     for operation in self.pipeline.operations:
@@ -315,8 +357,12 @@ def main():
 
                     # image_to_paste = Image.fromarray(noisy('poisson', image_to_paste))
                     # determine position of image within collage
-                    x = random.randint(0, max(collage.width - image_to_paste.width, 1))
-                    y = random.randint(0, max(collage.height - image_to_paste.height, 1))
+                    x = random.randint(xmin, max(xmax - image_to_paste.width, xmin + 1))
+                    if x >= collage.width - image_to_paste.width:
+                        x = collage.width - image_to_paste.width
+                    y = random.randint(ymin, max(ymax - image_to_paste.height, ymin + 1))
+                    if y >= collage.height - image_to_paste.height:
+                        y = collage.height - image_to_paste.height
 
                     # determine sample's bounding box and ensure bounding box is not outside image
                     # coords have format [min_x, min_y, max_x, max_y]
@@ -526,7 +572,7 @@ def main():
             class_label_map[classes[k]] = k + 1
 
         save_label_map(class_label_map, CONFIGS['collage_record_save_path'])
-        from concurrent.futures import ThreadPoolExecutor
+        print("Generating collage...")
         with ThreadPoolExecutor(CONFIGS['num_workers']) as executor:
             futures = [executor.submit(gen_collages,
                                        t, train_count, val_count, train_writers, val_writer, class_label_map)
