@@ -26,7 +26,7 @@ from vision.ssd.vgg_ssd import create_vgg_ssd
 from vision.ssd.mobilenetv1_ssd import create_mobilenetv1_ssd
 from vision.ssd.ssd import MatchPrior
 from vision.utils.misc import str2bool, Timer, store_labels
-from sgdr import SGDRScheduler
+from vision.utils.sgdr import SGDRScheduler
 
 
 class PlotLosses(tf.keras.callbacks.Callback):
