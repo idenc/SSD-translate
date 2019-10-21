@@ -11,7 +11,7 @@ from tensorflow.python.keras.utils.data_utils import Sequence
 class VOCDataset(Sequence):
 
     def __init__(self, root, transform=None, target_transform=None, is_test=False, keep_difficult=False,
-                 batch_size=32, shuffle=False):
+                 batch_size=32, shuffle=True):
         """Dataset for VOC data.
         Args:
             root: the root of the VOC2007 or VOC2012 dataset, the directory contains the following sub-directories:

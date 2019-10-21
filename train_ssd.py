@@ -78,7 +78,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument("--dataset_type", default="voc", type=str,
                     help='Specify dataset type. Currently support voc and open_images.')
 parser.add_argument('--datasets', nargs='+', help='Dataset directory path', required=True)
-parser.add_argument('--validation_dataset', help='Dataset directory path', required=True)
+parser.add_argument('--validation_dataset', help='Dataset directory path')
 parser.add_argument('--balance_data', action='store_true',
                     help="Balance training data by down-sampling more frequent labels.")
 
@@ -179,21 +179,23 @@ if __name__ == '__main__':
     for dataset_path in args.datasets:
         if args.dataset_type == 'voc':
             dataset = VOCDataset(dataset_path, transform=train_transform,
-                                 target_transform=target_transform, batch_size=args.batch_size)
+                                 target_transform=target_transform, batch_size=args.batch_size,
+                                 shuffle=True)
             label_file = os.path.join(args.checkpoint_folder, "voc-model-labels.txt")
             store_labels(label_file, dataset.class_names)
             num_classes = len(dataset.class_names)
         elif args.dataset_type == 'open_images':
             dataset = OpenImagesDataset(dataset_path,
                                         transform=train_transform, target_transform=target_transform,
-                                        dataset_type="train", balance_data=args.balance_data)
+                                        dataset_type="train", balance_data=args.balance_data,
+                                        batch_size=args.batch_size, shuffle=True)
             label_file = os.path.join(args.checkpoint_folder, "open-images-model-labels.txt")
             store_labels(label_file, dataset.class_names)
             logging.info(dataset)
             num_classes = len(dataset.class_names)
         elif args.dataset_type == 'tfrecord':
             dataset = RecordDataset(dataset_path, transform=train_transform, target_transform=target_transform,
-                                    batch_size=args.batch_size)
+                                    batch_size=args.batch_size, shuffle=True)
             label_file = os.path.join(args.checkpoint_folder, "tfrecord-model-labels.txt")
             store_labels(label_file, dataset.class_names)
             num_classes = len(dataset.class_names)
@@ -216,7 +218,7 @@ if __name__ == '__main__':
     elif args.dataset_type == 'open_images':
         val_dataset = OpenImagesDataset(dataset_path,
                                         transform=test_transform, target_transform=target_transform,
-                                        dataset_type="test")
+                                        dataset_type="test", batch_size=args.batch_size, shuffle=False)
         logging.info(val_dataset)
     elif args.dataset_type == 'tfrecord':
         val_dataset = RecordDataset(args.validation_dataset, transform=test_transform,

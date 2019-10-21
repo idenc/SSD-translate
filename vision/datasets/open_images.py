@@ -11,11 +11,14 @@ class OpenImagesDataset(Sequence):
 
     def __init__(self, root,
                  transform=None, target_transform=None,
-                 dataset_type="train", balance_data=False):
+                 dataset_type="train", balance_data=False, batch_size=32,
+                 shuffle=True):
         self.root = pathlib.Path(root)
         self.transform = transform
         self.target_transform = target_transform
         self.dataset_type = dataset_type.lower()
+        self.batch_size = batch_size
+        self.shuffle = shuffle
 
         self.data, self.class_names, self.class_dict = self._read_data()
         self.num_records = len(self.data)
@@ -54,7 +57,18 @@ class OpenImagesDataset(Sequence):
             np.random.shuffle(idxs)
         for j, i in enumerate(idxs):
             _, image, boxes, labels = self._getitem(i)
-        return image, boxes, labels
+            inputs.append(image)
+            target1.append(boxes.numpy())
+            target2.append(labels.numpy())
+
+            # Batch is done or we ran out of images to fill last batch
+            if len(target1) == self.batch_size or j == end - 1:
+                tmp_inputs = np.array(inputs, dtype=np.float32)
+                tmp_target1 = np.array(target1)
+                tmp_target2 = np.array(target2)
+                tmp_target2 = np.expand_dims(tmp_target2, 2)
+                tmp_target = np.concatenate([tmp_target1, tmp_target2], axis=2)
+                return tmp_inputs, tmp_target
 
     def get_annotation(self, index):
         """To conform the eval_ssd implementation that is based on the VOC dataset."""
@@ -87,7 +101,7 @@ class OpenImagesDataset(Sequence):
         return data, class_names, class_dict
 
     def __len__(self):
-        return len(self.data)
+        return int(np.ceil(self.num_records / float(self.batch_size)))
 
     def __repr__(self):
         if self.class_stat is None:
@@ -96,9 +110,11 @@ class OpenImagesDataset(Sequence):
                 for class_index in example['labels']:
                     class_name = self.class_names[class_index]
                     self.class_stat[class_name] += 1
+        min_class_name = min(self.class_stat, key=self.class_stat.get)
+        self.min_image_num = self.class_stat[min_class_name]
         content = ["Dataset Summary:"
                    f"Number of Images: {len(self.data)}",
-                   f"Minimum Number of Images for a Class: {self.min_image_num}",
+                   f"Minimum Number of Images for a Class: {min_class_name}: {self.min_image_num}",
                    "Label Distribution:"]
         for class_name, num in self.class_stat.items():
             content.append(f"\t{class_name}: {num}")
