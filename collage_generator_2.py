@@ -12,6 +12,9 @@ from PIL import Image, ImageDraw
 
 
 def main():
+    """
+    Modify the CONFIGS dictionary to your desired directories/settings
+    """
     CONFIGS = {
         # Maximum number of masked image to paste over background
         'max_num_samples': 3,
@@ -20,18 +23,17 @@ def main():
         # Path to save JPEG images to, only applies if save_to_jpg is True
         'collage_save_path': r"C:\Users\iden\Documents\collages",
         # Path to save collage TFRecord files to
-        'collage_record_save_path': r"C:\Users\iden\Documents\test",
+        'collage_record_save_path': r"D:\fruits_large",
         # Whether to save JPG images of each generated collage
-        'save_to_jpg': True,
+        'save_to_jpg': False,
         # Number of collages to generate
         'collage_count': 100,
         # Train-validation split ratio
-        'train_split': 0.9,
+        'train_split': 0.97,
         # How many collages to save in a single TFRecord file
-        # This is to enable true shuffling during training as TFRecord files are sequential
+        # This is to enable true shuffling during training as TFRecord files are sequential only
         'shard_size': 500,
         # Settings for augmentor library augmentations to apply to masked images
-        # Set probability to 0 to disable the augmentation
         'augmentation_settings': {
             'rotate': {
                 'probability': 0.5,
@@ -58,13 +60,13 @@ def main():
             },
             'random_contrast': {
                 'probability': 0.4,
-                'min_factor': 0.3,
-                'max_factor': 3.0
+                'min_factor': 0.5,
+                'max_factor': 2.0
             },
             'random_brightness': {
                 'probability': 0.4,
-                'min_factor': 0.3,
-                'max_factor': 3.0
+                'min_factor': 0.5,
+                'max_factor': 2.0
             }
         },
         'num_workers': 12,  # Number of threads to use when generating images
@@ -124,7 +126,6 @@ def main():
         def display(self):
             plt.imshow(self.image)
 
-    # Read dataset and backgrounds into memory for speed purposes (Can be very memory intensive)
     dataset, dataset_path = {}, CONFIGS['dataset_path']
 
     assert os.path.exists(dataset_path), "ERROR: dataset path is invalid."
@@ -275,12 +276,13 @@ def main():
             self.pipeline = Augmentor.Pipeline()
 
             augmentation_settings = self.CONFIGS['augmentation_settings']
+            # Add each of the sample augmentations to pipeline with desired settings
             self.pipeline.rotate_without_crop(**augmentation_settings['rotate'])
             self.pipeline.random_distortion(**augmentation_settings['random_distortion'])
             self.pipeline.flip_left_right(**augmentation_settings['flip_left_right'])
             self.pipeline.flip_top_bottom(**augmentation_settings['flip_top_bottom'])
             self.pipeline.rotate_random_90(**augmentation_settings['rotate_random_90'])
-            self.pipeline.skew(**augmentation_settings['skew'])
+            # self.pipeline.skew(**augmentation_settings['skew'])
             self.pipeline.random_contrast(**augmentation_settings['random_contrast'])
             self.pipeline.random_brightness(**augmentation_settings['random_brightness'])
 
@@ -324,6 +326,7 @@ def main():
                     tile = self.original_samples[i]
                     image_to_paste = tile.image
                     if self.CONFIGS['use_floodfill']:
+                        # Fill background with transparency
                         ImageDraw.floodfill(image_to_paste, (0, 0), (255, 255, 255, 0), thresh=90)
 
                     # Get region coords
@@ -335,6 +338,7 @@ def main():
                     region_width = xmax - xmin
                     region_height = ymax - ymin
 
+                    # Resize sample to fit region
                     if region_width > region_height:
                         # resize image
                         scale = region_width / region_height
@@ -350,6 +354,7 @@ def main():
 
                     image_to_paste = image_to_paste.resize(new_size, Image.ANTIALIAS)
 
+                    # Perform augmentations based on probability
                     for operation in self.pipeline.operations:
                         r = round(random.uniform(0, 1), 1)
                         if r <= operation.probability:
