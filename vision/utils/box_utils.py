@@ -228,6 +228,12 @@ def hard_negative_mining(loss, labels, neg_pos_ratio):
 
 
 def center_form_to_corner_form(locations):
+    if len(locations.shape) == 3:
+        loc_slice_first = locations[:, :, :2]
+        loc_slice_second = locations[:, :, 2:]
+        return tf.concat([loc_slice_first - loc_slice_second / 2,
+                          loc_slice_first + loc_slice_second / 2], len(locations.shape) - 1)
+
     return tf.concat([locations[..., :2] - locations[..., 2:] / 2,
                       locations[..., :2] + locations[..., 2:] / 2], len(locations.shape) - 1)
 

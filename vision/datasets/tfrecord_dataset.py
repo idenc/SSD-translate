@@ -28,15 +28,21 @@ class RecordDataset(Sequence):
             if os.path.isfile(self.root / "num_val.txt"):
                 with open(self.root / "num_val.txt", 'r') as f:
                     self.num_records = int(f.read())
+            else:
+                logging.critical("No num_val.txt found. Please create one with the total number of validation images")
+                raise SystemExit(-1)
             self.ids = [i for i in range(self.num_records)]
         else:
             image_sets_files = []
             for file_name in os.listdir(self.root):
                 if file_name.startswith('train') and file_name.endswith('.record'):
                     image_sets_files.append(os.path.join(root, file_name))
-            if os.path.isfile(self.root / "num_val.txt"):
+            if os.path.isfile(self.root / "num_train.txt"):
                 with open(self.root / "num_train.txt", 'r') as f:
                     self.num_records = int(f.read())
+            else:
+                logging.critical("No num_train.txt found. Please create one with the total number of training images")
+                raise SystemExit(-1)
 
         self.keys_to_features = {
             'image/encoded':
