@@ -16,23 +16,28 @@ def main():
     Modify the CONFIGS dictionary to your desired directories/settings
     """
     CONFIGS = {
-        # Maximum number of masked image to paste over background
-        'max_num_samples': 3,
+        # Maximum number of masked images to paste over background
+        'max_num_samples': 1,
         # Path to masked images
-        'dataset_path': r'D:\Fruit-Images-Dataset-master\Fruit-Images-Dataset-master\Training',
+        'dataset_path': r'',
         # Path to save JPEG images to, only applies if save_to_jpg is True
-        'collage_save_path': r"C:\Users\iden\Documents\collages",
+        'collage_save_path': r"",
         # Path to save collage TFRecord files to
-        'collage_record_save_path': r"D:\fruits_large",
+        'collage_record_save_path': r"",
         # Whether to save JPG images of each generated collage
         'save_to_jpg': False,
+        # Whether to generate tfrecords containing collages
+        'save_to_tfrecord': True,
         # Number of collages to generate
-        'collage_count': 100,
+        'collage_count': 10000,
         # Train-validation split ratio
-        'train_split': 0.97,
+        'train_split': 0.90,
         # How many collages to save in a single TFRecord file
         # This is to enable true shuffling during training as TFRecord files are sequential only
-        'shard_size': 500,
+        'shard_size': 250,
+        # Minimum/maximum percentage of the background the pasted image takes up
+        'pasted_image_min_size': 0.3,
+        'pasted_image_max_size': 0.9,
         # Settings for augmentor library augmentations to apply to masked images
         'augmentation_settings': {
             'rotate': {
@@ -69,15 +74,15 @@ def main():
                 'max_factor': 2.0
             }
         },
-        'num_workers': 12,  # Number of threads to use when generating images
+        'num_workers': 6,  # Number of threads to use when generating images
         # Probability to exclude sample from collage
         # A single collage will always have at least one sample
         'mask_probability': 0.4,
         # Applies flood fill to each sample image to mask solid background out
-        'use_floodfill': True,
+        'use_floodfill': False,
         'collage_background_type': 'img',  # `img` for background images, `solid` for solid colour background
-        # Path to background images to use
-        'collage_background_path': r"D:\VOC_datasets\VOC2012\JPEGImages",
+        # Path to background images to use (e.g. VOC Dataset)
+        'collage_background_path': r"",
         # Random samples from background directory
         'collage_background_colour': (255, 255, 255)
     }
@@ -343,13 +348,13 @@ def main():
                         # resize image
                         scale = region_width / region_height
                         # sample takes up minimum 30% of background image and maximum 95%
-                        new_size = random.randint(int(region_height * 0.3), int(region_height * 0.95))
+                        new_size = random.randint(int(region_height * 0.75), int(region_height * 0.90))
                         new_size = (int(new_size * scale), new_size)
                     else:
                         # resize image
                         scale = region_height / region_width
                         # sample takes up minimum 30% of background image and maximum 95%
-                        new_size = random.randint(int(region_width * 0.3), int(region_width * 0.95))
+                        new_size = random.randint(int(region_width * 0.75), int(region_width * 0.90))
                         new_size = (new_size, int(new_size * scale))
 
                     image_to_paste = image_to_paste.resize(new_size, Image.ANTIALIAS)
@@ -502,7 +507,7 @@ def main():
         :param output_path: Path to write label_map.txt
         :return:
         """
-        with open(os.path.join(output_path, "label_map.txt"), "w") as f:
+        with open(os.path.join(output_path, "label_map.pbtxt"), "w") as f:
             for label in list(label_map.keys()):
                 line = "item {\n    id: " + str(label_map[label]) + "\n    name: '" + label + "'\n}\n"
                 f.write(line)
@@ -533,15 +538,16 @@ def main():
 
         # save collage as JPEG image
         if CONFIGS['save_to_jpg']:
-            image_save_path = os.path.join(CONFIGS['collage_save_path'], filename)
+            image_save_path = os.path.join(CONFIGS['collage_save_path'], collage.labels[0], filename)
             collage.collage.save(image_save_path, "JPEG")
 
-        # create a TF example using image + annotation data
-        annotation = create_annotation(collage, filename)
-        val_tf_example = create_tf_example(annotation, class_label_map, collage.collage)
+        if CONFIGS['save_to_tfrecord']:
+            # create a TF example using image + annotation data
+            annotation = create_annotation(collage, filename)
+            val_tf_example = create_tf_example(annotation, class_label_map, collage.collage)
 
-        # write serialized TF example
-        writer.write(val_tf_example.SerializeToString())
+            # write serialized TF example
+            writer.write(val_tf_example.SerializeToString())
 
     def create_collages():
         """
@@ -562,6 +568,12 @@ def main():
         # Sort to ensure labels are in the same order every time data is generated
         classes.sort()
         class_label_map = collections.OrderedDict()
+        # If saving jps, create folders for each class
+        if CONFIGS['save_to_jpg']:
+            for class_name in classes:
+                folder_path = os.path.join(CONFIGS['collage_save_path'], class_name)
+                if not os.path.exists(folder_path):
+                    os.mkdir(folder_path)
 
         # create train & val set writers
         base_path = os.path.join(CONFIGS['collage_record_save_path'], "train")
