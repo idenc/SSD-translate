@@ -84,7 +84,7 @@ parser.add_argument('--balance_data', action='store_true',
 
 parser.add_argument('--net', default="mb1-ssd",
                     choices=['vgg16-ssd', 'mb1-ssd', 'mb1-ssd-lite', 'mb2-ssd-lite', 'sq-ssd-lite'],
-                    help="The network architecture, it can be mb1-ssd, mb1-lite-ssd, mb2-ssd-lite or vgg16-ssd.")
+                    help="The network architecture, it can be mb1-ssd, mb2-ssd-lite or vgg16-ssd.")
 parser.add_argument('--freeze_base_net', action='store_true',
                     help="Freeze base net layers.")
 parser.add_argument('--freeze_net', action='store_true',
