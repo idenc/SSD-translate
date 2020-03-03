@@ -48,7 +48,8 @@ if args.model_path != '':
     net.ssd = load_model(args.model_path)
 else:
     net.ssd.load_weights(args.weights_path, by_name=True)
-
+net.ssd.save('test')
+raise SystemExit
 if net_type == 'vgg16-ssd':
     predictor = create_vgg_ssd_predictor(net, candidate_size=200)
 elif net_type == 'mb1-ssd':
@@ -72,7 +73,8 @@ if os.path.isdir(image_path):
         orig_image = cv2.imread(os.path.join(image_path, img))
         image = cv2.cvtColor(orig_image, cv2.COLOR_BGR2RGB)
         boxes, labels, probs = predictor.predict(image, 10, 0.5)
-
+        if len(probs) == 0:
+            continue
         for i in range(boxes.shape[0]):
             box = boxes[i, :]
             cv2.rectangle(orig_image, (box[0], box[1]), (box[2], box[3]), (255, 255, 0), 4)

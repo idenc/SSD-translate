@@ -21,7 +21,7 @@ label_path = sys.argv[3]
 if len(sys.argv) >= 5:
     cap = cv2.VideoCapture(sys.argv[4])  # capture from file
 else:
-    cap = cv2.VideoCapture('http://192.168.1.69:8080/videofeed')  # capture from camera
+    cap = cv2.VideoCapture('http://10.10.40.185:8080/videofeed')  # capture from camera
     cap.set(3, 1920)
     cap.set(4, 1080)
 
@@ -66,7 +66,7 @@ while True:
         continue
     image = cv2.cvtColor(orig_image, cv2.COLOR_BGR2RGB)
     timer.start()
-    boxes, labels, probs = predictor.predict(image, 10, 0.6)
+    boxes, labels, probs = predictor.predict(image, 10, 0.5)
     interval = timer.end()
     print('Time: {:.2f}s, Detect Objects: {:d}.'.format(interval, labels.shape[0]))
     for i in range(boxes.shape[0]):

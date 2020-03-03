@@ -348,7 +348,8 @@ def main():
                         # resize image
                         scale = region_width / region_height
                         # sample takes up minimum 30% of background image and maximum 95%
-                        new_size = random.randint(int(region_height * 0.75), int(region_height * 0.90))
+                        new_size = random.randint(int(region_height * CONFIGS['pasted_image_min_size']),
+                                                  int(region_height * CONFIGS['pasted_image_max_size']))
                         new_size = (int(new_size * scale), new_size)
                     else:
                         # resize image

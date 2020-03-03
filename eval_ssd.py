@@ -28,7 +28,7 @@ parser.add_argument("--dataset_type", default="voc", type=str,
 parser.add_argument("--dataset", type=str, help="The root directory of the dataset.", required=True)
 parser.add_argument("--label_file", type=str, help="The label file path.", required=True)
 parser.add_argument("--use_cuda", type=str2bool, default=True)
-parser.add_argument("--use_2007_metric", type=str2bool, default=False)
+parser.add_argument("--use_2007_metric", type=str2bool, default=True)
 parser.add_argument("--nms_method", type=str, default="hard")
 parser.add_argument("--iou_threshold", type=float, default=0.5, help="The threshold of Intersection over Union.")
 parser.add_argument("--eval_dir", default="eval_results", type=str, help="The directory to store evaluation results.")
@@ -135,7 +135,7 @@ if __name__ == '__main__':
     if args.dataset_type == "voc":
         dataset = VOCDataset(args.dataset, is_test=True)
     elif args.dataset_type == 'open_images':
-        dataset = OpenImagesDataset(args.dataset, dataset_type="test")
+        dataset = OpenImagesDataset(args.dataset, dataset_type="validation")
     elif args.dataset_type == 'tfrecord':
         dataset = RecordDataset(args.dataset, is_test=True, shuffle=False)
 

@@ -76,7 +76,8 @@ parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Tensorflow 2.0')
 
 parser.add_argument("--dataset_type", default="voc", type=str,
-                    help='Specify dataset type. Currently support voc and open_images.')
+                    help='Specify dataset type. Currently support voc and open_images.',
+                    choices=["voc", "open_images", "tfrecord"])
 parser.add_argument('--datasets', nargs='+', help='Dataset directory path', required=True)
 parser.add_argument('--validation_dataset', help='Dataset directory path')
 parser.add_argument('--balance_data', action='store_true',
@@ -91,7 +92,7 @@ parser.add_argument('--freeze_net', action='store_true',
                     help="Freeze all the layers except the prediction head.")
 
 parser.add_argument('--mb2_width_mult', default=1.0, type=float,
-                    help='Width Multiplifier for MobilenetV2')
+                    help='Width Multiplier for MobilenetV2')
 
 # Params for Optimizer
 parser.add_argument('--optimizer', default='SGD', type=str, help='What optimizer to use while training',
@@ -101,9 +102,9 @@ parser.add_argument('--lr_scheduler', default='SGDR', choices=[None, 'SGDR'],
 parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float,
                     help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float,
-                    help='Momentum value for optimizer')
+                    help='Momentum value for optimizer (only applies with SGD)')
 parser.add_argument('--weight_decay', default=5e-4, type=float,
-                    help='Weight decay for SGD')
+                    help='Weight decay for SGD and Adam')
 
 # Params for loading pretrained basenet or checkpoints.
 parser.add_argument('--base_net',
@@ -126,13 +127,16 @@ parser.add_argument('--use_cuda', default=True, type=str2bool,
 parser.add_argument('--save_format', choices=['h5', 'tf'],
                     help="What save format to use in model checkpoint callback. "
                          "h5 to save whole model to .h5 file and tf to save to Tensorflow SavedModel format",
-                    default='h5')
+                    default='tf')
 parser.add_argument('--checkpoint_folder', default='models',
                     help='Directory for saving checkpoint models')
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 args = parser.parse_args()
+
+if args.dataset_type != "open_images" and not args.validation_dataset:
+    parser.error("validation_dataset is required")
 
 if __name__ == '__main__':
     timer = Timer()
