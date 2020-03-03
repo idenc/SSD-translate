@@ -355,7 +355,8 @@ def main():
                         # resize image
                         scale = region_height / region_width
                         # sample takes up minimum 30% of background image and maximum 95%
-                        new_size = random.randint(int(region_width * 0.75), int(region_width * 0.90))
+                        new_size = random.randint(int(region_width * CONFIGS['pasted_image_min_size']),
+                                                  int(region_width * CONFIGS['pasted_image_max_size']))
                         new_size = (new_size, int(new_size * scale))
 
                     image_to_paste = image_to_paste.resize(new_size, Image.ANTIALIAS)
@@ -556,8 +557,10 @@ def main():
         :return:
         """
         # create save directories
-        os.makedirs(CONFIGS['collage_save_path'], exist_ok=True)
-        os.makedirs(CONFIGS['collage_record_save_path'], exist_ok=True)
+        if CONFIGS['save_to_jpg']:
+            os.makedirs(CONFIGS['collage_save_path'], exist_ok=True)
+        if CONFIGS['save_to_tfrecord']:
+            os.makedirs(CONFIGS['collage_record_save_path'], exist_ok=True)
 
         # generate required number of collages
         train_count = int(CONFIGS['train_split'] * CONFIGS['collage_count'])

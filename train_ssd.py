@@ -85,11 +85,12 @@ parser.add_argument('--balance_data', action='store_true',
 
 parser.add_argument('--net', default="mb1-ssd",
                     choices=['vgg16-ssd', 'mb1-ssd', 'mb1-ssd-lite', 'mb2-ssd-lite', 'sq-ssd-lite'],
-                    help="The network architecture, it can be mb1-ssd, mb2-ssd-lite or vgg16-ssd.")
-parser.add_argument('--freeze_base_net', action='store_true',
-                    help="Freeze base net layers.")
-parser.add_argument('--freeze_net', action='store_true',
-                    help="Freeze all the layers except the prediction head.")
+                    help="The network architecture")
+freeze_group = parser.add_mutually_exclusive_group()
+freeze_group.add_argument('--freeze_base_net', action='store_true',
+                          help="Freeze base net layers.")
+freeze_group.add_argument('--freeze_net', action='store_true',
+                          help="Freeze all the layers except the prediction head.")
 
 parser.add_argument('--mb2_width_mult', default=1.0, type=float,
                     help='Width Multiplier for MobilenetV2')
@@ -107,10 +108,11 @@ parser.add_argument('--weight_decay', default=5e-4, type=float,
                     help='Weight decay for SGD and Adam')
 
 # Params for loading pretrained basenet or checkpoints.
-parser.add_argument('--base_net',
+load_group = parser.add_mutually_exclusive_group()
+load_group.add_argument('--base_net',
                     help='Pretrained base model')
-parser.add_argument('--pretrained_ssd', help='Pre-trained base model')
-parser.add_argument('--resume', default=None, type=str,
+load_group.add_argument('--pretrained_ssd', help='Pre-trained base model')
+load_group.add_argument('--resume', default=None, type=str,
                     help='Checkpoint state_dict file to resume training from')
 
 # Train params
